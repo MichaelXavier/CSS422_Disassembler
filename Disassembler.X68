@@ -8,9 +8,22 @@
 START:				; first instruction of program
 
 
+**********************************************
+* decode - Expects A0 to point to the current instruction
+* TODO: more documentation
+**********************************************
+decode	MOVEM.L	A1-A2/D0-D1,-(SP)
+				LEA	jmp_table,A1	; prepare to index into the jump table
+				LEA	A0,A2		; cache the starting address for counting purposes
+				MOVE.B	#12,D1 ; We will shift LSR right 12 bytes to get the 4 MSBs
+				LSR.W	D1,D0	; D0 now has the 4 bits we need for the jump table
+				MULU	#6,D0	; Prepare D0 as an index into the jump table
+				JSR	00(A1,D1)	; spool up FTL drives. 3,2,1 JUMP!
 
-	MOVE.B	#9,D0
-	TRAP	#15		; halt simulator
+				; TODO continue subroutine here. jump table should save the opcode and advance?
+
+				MOVEM.L	(SP)+,A1-A2/D0-D1
+
 
 jmp_table	JMP	code0000
 		JMP	code0000
