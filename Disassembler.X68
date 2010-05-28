@@ -10,19 +10,23 @@ START:				; first instruction of program
 
 **********************************************
 * decode - Expects A0 to point to the current instruction
+* D2 is the unmodified opcode WORD
+* D0 is used to index into the jump table and it contains bits and pieces of the instruction at different parts
 * TODO: more documentation
 **********************************************
-decode	MOVEM.L	A1-A2/D0-D1,-(SP)
-				LEA	jmp_table,A1	; prepare to index into the jump table
-				LEA	A0,A2		; cache the starting address for counting purposes
-				MOVE.B	#12,D1 ; We will shift LSR right 12 bytes to get the 4 MSBs
-				LSR.W	D1,D0	; D0 now has the 4 bits we need for the jump table
-				MULU	#6,D0	; Prepare D0 as an index into the jump table
-				JSR	00(A1,D1)	; spool up FTL drives. 3,2,1 JUMP!
+decode_inst	MOVEM.L	A1-A2/D0-D2,-(SP)
+		LEA	jmp_table,A1	; prepare to index into the jump table
+		LEA	A0,A2		; cache the starting address for counting purposes
+		MOVE.B	#12,D1 		; We will shift LSR right 12 bytes to get the 4 MSBs
+		MOVE.W	(A0)+,D2	; advance A0 by a word, read the full opcode into D2
+		MOVE.W	D2,D0		; cache a working copy of the opcode to D0
+		LSR.W	D1,D0		; D0 now has the 4 bits we need for the jump table
+		MULU	#6,D0		; Prepare D0 as an index into the jump table
+		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
 				; TODO continue subroutine here. jump table should save the opcode and advance?
 
-				MOVEM.L	(SP)+,A1-A2/D0-D1
+		MOVEM.L	(SP)+,A1-A2/D0-D2	; restore all the registers we used
 
 
 jmp_table	JMP	code0000
@@ -47,7 +51,26 @@ code0000	STOP	#$2700
 code0001	STOP	#$2700
 code0010	STOP	#$2700
 code0011	STOP	#$2700
-code0100	STOP	#$2700	; TODO: most of these will be easy
+
+code0100	BSR	mask_f4		; cache full instruction word into d0
+		CMPI.W	#$E71,D0	; 111001110001 remainder is nop
+		BEQ	0100_nop
+		CMPI.W	#$E75,D0
+		BEQ	0100_rts
+		
+		
+0100_nop	LEA	os_nop,A1	; we got a nop, load the string and length
+		MOVE.W	osl_nop,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0100_rts	LEA	os_rts,A1	; we got an RTS, load the string and length
+		MOVE.W	osl_rts,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		RTS			; FIXME: does this break all the way out of decode_inst?		
+		
+
+
 code0101	STOP	#$2700
 code0110	STOP	#$2700
 code0111	STOP	#$2700
@@ -58,6 +81,15 @@ code1011	BRA	code1011 ;FIXME
 code1101	STOP	#$2700
 code1110	STOP	#$2700
 code1111	STOP	#$2700
+
+**********************************************
+* mask_f4
+* Given the original instruction word in D2, masks off
+* the first 4 bits, leaving the last 12 in D0
+**********************************************
+mask_f4		MOVE.W	D2,D0		; return value will be in D0. used internally so thats OK
+		ANDI.W	#$0FFF,D0	; done
+		RTS
 
 * Variables and Strings
 **********************************************
@@ -145,6 +177,7 @@ szl_l		szl_b-sz_b
 
 
 	END	START		; last line of source
+
 
 
 
