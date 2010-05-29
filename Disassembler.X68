@@ -22,7 +22,7 @@ decode_inst	MOVEM.L	A1-A2/D0-D2,-(SP)
 		MOVE.W	D2,D0		; cache a working copy of the opcode to D0
 		LSR.W	D1,D0		; D0 now has the 4 bits we need for the jump table
 		MULU	#6,D0		; Prepare D0 as an index into the jump table
-		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
+		BSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
 				; TODO continue subroutine here. jump table should save the opcode and advance?
 
@@ -47,12 +47,71 @@ jmp_table	JMP	code0000
 		JMP	code1110
 		JMP	code1111
 
-code0000	STOP	#$2700
+code0000	MOVE.W	D2,D0 		; don't need to mask the first 4 because they are already 0. NICE		
+		ANDI.W	#$0F00,D0	; get the next 4 to see which instruction it is
+		ASR.W	#8,D0		; roll it right 4 so we can treat it like a number
+		CMPI.W	#6,D0		; 6 is an ADDI
+		BEQ	0000_addi	; we've gotten an ADDI
+		CMPI.W	#2,D0		; 2 is an ANDI
+		BEQ	0000_andi	; we've gotten an ANDI
+		CMPI.W	#12,D0		; 12 is an CMPI
+		BEQ	0000_cmpi	; we've gotten an CMPI
+		CMPI.W	#10,D0		; 10 is an EORI
+		BEQ	0000_eori	; we've gotten an EORI
+		CMPI.W	#0,D0		; 0 is an ORI
+		BEQ	0000_ori	; we've gotten an ORI
+		CMPI.W	#4,D0		; 4 is a SUBI
+		BEQ	0000_subi	; we've gotten an SUBI
+		MOVE.B	#1,D6		; error!
+		RTS			; FIXME: do i need to do a subroutine to handle error or just rts with bad bit?
+		
+0000_addi	LEA	os_addi,A1	; we got an ADDI, load the string and length
+		MOVE.W	osl_addi,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with addi stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0000_andi	LEA	os_andi,A1	; we got an ANDI, load the string and length
+		MOVE.W	osl_andi,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with andi stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0000_cmpi	LEA	os_cmpi,A1	; we got an CMPI, load the string and length
+		MOVE.W	osl_cmpi,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with cmpi stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0000_eori	LEA	os_eori,A1	; we got an EORI, load the string and length
+		MOVE.W	osl_eori,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with eori stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0000_ori	LEA	os_ori,A1	; we got an ORI, load the string and length
+		MOVE.W	osl_ori,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with ori stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
+0000_subi	LEA	os_subi,A1	; we got an SUBI, load the string and length
+		MOVE.W	osl_subi,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with subi stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?
+
 code0001	STOP	#$2700
 code0010	STOP	#$2700
 code0011	STOP	#$2700
 
-code0100	BSR	mask_f4		; cache full instruction word into d0
+code0100	BSR	mask_f4		; cache full instruction word into D0
 		CMPI.W	#$E71,D0	; 111001110001 remainder is nop
 		BEQ	0100_nop
 		CMPI.W	#$E75,D0
@@ -79,7 +138,7 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		
 		;TODO: MOVEM or throw an error
 		
-0100_nop	LEA	os_nop,A1	; we got a nop, load the string and length
+0100_nop	LEA	os_nop,A1	; we got a NOP, load the string and length
 		MOVE.W	osl_nop,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		RTS			; FIXME: does this break all the way out of decode_inst?
@@ -107,25 +166,25 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		MOVE.W	osl_clr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with not stuff
+		; TODO: continue on with clr stuff
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_jmp	LEA	os_jmp,A1	; we got a JMP, load the string and length
 		MOVE.W	osl_jmp,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with not stuff
+		; TODO: continue on with jmp stuff
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_jsr	LEA	os_jsr,A1	; we got a JSR, load the string and length
 		MOVE.W	osl_jsr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with not stuff
+		; TODO: continue on with jsr stuff
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_swap	LEA	os_swap,A1	; we got a SWAP, load the string and length
 		MOVE.W	osl_swap,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with not stuff
+		; TODO: continue on with swap stuff
 		RTS
 
 code0101	STOP	#$2700
@@ -279,6 +338,7 @@ szl_l		szl_b-sz_b
 
 
 	END	START		; last line of source
+
 
 
 
