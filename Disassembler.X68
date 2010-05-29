@@ -62,8 +62,22 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		CMPI.W	#$0400,D0	; if the next 4 bits are 0100, NEG
 		BEQ	0100_neg	; we've found a NEG
 		CMPI.W	#$0600,D0	; if the next 4 bits are 0110, NOT
-		BEQ	0110_not	; we've found a NOT
+		BEQ	0100_not	; we've found a NOT
+		CMPI.W	#$0002,D0	; if the next 4 bits are 0010, CLR
+		BEQ	0100_clr	; we've found a CLR
+		MOVE.W	D2,D0		; restore the D2 register
+		ANDI.W	#$0FC0,D0	; take 6 bits after the first nibble
+		ASR.W	#6,D0		; roll it right 4 bits so it can be treated as a number
+		CMPI.W	#$3B,D0		; 111011 is JMP
+		BEQ	0100_jmp	; we've found a JMP
+		CMPI.W	#$3A,D0		; 111010 is JSR
+		BEQ	0100_jsr	; we've found a JSR
+		MOVE.W	D2,D0		; restore the D2 register
+		ANDI.W	#$0FF8,D0	; take 9 bits after the first nibble
+		CMPI.W	#$2100,D0	; 100001000 is SWAP
+		BEQ	0100_swap	; we've found a SWAP
 		
+		;TODO: MOVEM or throw an error
 		
 0100_nop	LEA	os_nop,A1	; we got a nop, load the string and length
 		MOVE.W	osl_nop,D1	; FIXME: assuming that I/O's function wants them in these regs
@@ -88,7 +102,31 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		BSR	sz_76		; print out the size from bits 7-6
 		; TODO: continue on with not stuff
 		RTS			; FIXME: does this break all the way out of decode_inst?		
+		
+0100_clr	LEA	os_clr,A1	; we got a CLR, load the string and length
+		MOVE.W	osl_clr,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with not stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?		
 
+0100_jmp	LEA	os_jmp,A1	; we got a JMP, load the string and length
+		MOVE.W	osl_jmp,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: continue on with not stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?		
+
+0100_jsr	LEA	os_jsr,A1	; we got a JSR, load the string and length
+		MOVE.W	osl_jsr,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: continue on with not stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?		
+
+0100_swap	LEA	os_swap,A1	; we got a SWAP, load the string and length
+		MOVE.W	osl_swap,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: continue on with not stuff
+		RTS
 
 code0101	STOP	#$2700
 code0110	STOP	#$2700
@@ -241,6 +279,7 @@ szl_l		szl_b-sz_b
 
 
 	END	START		; last line of source
+
 
 
 
