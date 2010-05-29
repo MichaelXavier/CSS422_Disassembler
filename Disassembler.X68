@@ -188,9 +188,20 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		RTS
 
 code0101	STOP	#$2700
-code0110	STOP	#$2700
+code0110	BSR	mask_f4		; cache full instruction word into D0
+		CMPI.W	#$100,D0	; if the next 4 are 0001, its a BSR
+		BEQ	0110_bsr
+		MOVE.B	#1,D6		; error!
+		RTS			; FIXME: do i need to do a subroutine to handle error or just rts with bad bit?
+	
+0110_bsr	LEA	os_bsr,A1	; we got a BSR, load the string and length
+		MOVE.W	osl_bsr,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: continue on with BSR stuff
+		RTS
+		
 code0111	STOP	#$2700
-code1000	STOP	#$2700
+code1000	STOP	#$2700 		; FIXME: this is either an OR or its bad
 code1001	STOP	#$2700
 code1010	STOP	#$2700
 code1011	BRA	code1011 ;FIXME
@@ -338,6 +349,8 @@ szl_l		szl_b-sz_b
 
 
 	END	START		; last line of source
+
+
 
 
 
