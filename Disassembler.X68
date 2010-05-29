@@ -57,6 +57,12 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		BEQ	0100_nop
 		CMPI.W	#$E75,D0
 		BEQ	0100_rts
+		MOVE.W	D2,D0		; restore D0 as a copy of d2
+		ANDI.W	#$0F00,D0	; mask the second most significant nibble
+		CMPI.W	#$0400,D0	; if the next 4 bits are 0100, NEG
+		BEQ	0100_neg	; we've found a NEG
+		CMPI.W	#$0600,D0	; if the next 4 bits are 0110, NOT
+		BEQ	0110_not	; we've found a NOT
 		
 		
 0100_nop	LEA	os_nop,A1	; we got a nop, load the string and length
@@ -69,6 +75,19 @@ code0100	BSR	mask_f4		; cache full instruction word into d0
 		BSR	print_instr	; print the instruction to the buffer
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 		
+0100_neg	LEA	os_neg,A1	; we got a NEG, load the string and length
+		MOVE.W	osl_neg,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with neg stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?		
+
+0100_not	LEA	os_not,A1	; we got a NOT, load the string and length
+		MOVE.W	osl_not,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; print out the size from bits 7-6
+		; TODO: continue on with not stuff
+		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 
 code0101	STOP	#$2700
@@ -81,6 +100,51 @@ code1011	BRA	code1011 ;FIXME
 code1101	STOP	#$2700
 code1110	STOP	#$2700
 code1111	STOP	#$2700
+
+**********************************************
+* sz_76
+* It is very common for bits 7-6 to be the size bits, so the logic
+* to print that has been extracted here. D2 is expected to be the original register.
+* D0 (W) is modified and restored to hold the size bit mask
+**********************************************
+sz_76		MOVEM.W	D0,-(SP)	; save registers
+		MOVE.W	D2,D0		; copy the original to the D0
+		ANDI.W	#$00C0,D0	; check bits 7-6 for size
+		ASR.W	#6,D0		; roll it right so it is just a number, 0-2
+		BSR	print_3sz	; print out the size
+		MOVEM.W	(SP)+,D0	; restore registers
+		RTS			; done
+
+**********************************************
+* print_3sz
+* Since most of the size operations have 0,1,2 as B,W,L respectively
+* This should DRY (dont repeat yourself) out the code a bit
+* D0 argument is the 2 bit field for the size
+* A1 (L) and D1 (W) are used to call out to print_instr and are restored at the end
+**********************************************
+print_3sz	MOVEM.L	A1,-(SP)
+		MOVEM.W	D1,-(SP)
+		CMPI.W	#0,D0		; if its 0, byte operation
+		BEQ	print_szb	
+		CMPI.W	#1,D0		; if its 1, word operation
+		BEQ	print_szw	
+		CMPI.W	#2,D0		; if its 2, long operation
+		BEQ	print_szl
+print_szb	LEA	sz_b,A1		; load size B string address
+		MOVE.W	szl_b,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		BRA	print_3szc	; continue		
+print_szw	LEA	sz_w,A1		; load size W string address
+		MOVE.W	szl_w,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		BRA	print_3szc	; continue
+print_szl	LEA	sz_l,A1		; load size L string address
+		MOVE.W	szl_l,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		BRA	print_3szc	; continue
+print_3szc	MOVEM.W	(SP)+,D1	; continue with subroutine
+		MOVEM.L	(SP)+,A1
+		RTS
 
 **********************************************
 * mask_f4
@@ -177,6 +241,7 @@ szl_l		szl_b-sz_b
 
 
 	END	START		; last line of source
+
 
 
 
