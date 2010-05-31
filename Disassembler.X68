@@ -7,6 +7,36 @@
 	ORG	$1000
 START:				; first instruction of program
 
+*******************************************************************************
+*	Subroutine:	h_to_a
+*	Description:	takes Hex value, separates into individual Hex digits
+*			then saves them in memory as ASCII values
+*	Precondition:	D3 holds Hex value
+*			D4 holds number of Hex digits in value,counter
+*			A0 points to value in memory where ASCII values should
+*			be saved
+*	Postcondition:	A0's memory location will be filled with ASCII digits
+*			A0 will be put back at the start. it is more useful to 
+*			have it point to the start of the string it created than the end
+*			D2 will be used as utility register
+*			D6 and D7 will not be changed, no return value
+*******************************************************************************
+h_to_a		MOVEM.L	A0/D2,-(SP)	;save D2 and A0
+		MOVEM.W	D4,-(SP)	; save D4
+		CMPI.W	#00,D4		*is count done		
+		BEQ	ha_exit		*if done exit subroutine
+		ROL.L	#4,D3		*update D3 to next hex
+		MOVE.L	D3,D2		*so D3 isn't corrupted
+		ANDI.L	#$0000000F,D2	*isolate the last 4 binary digits
+		SUBI.B	#1,D4		*update counter
+		ADDI.W	#$30,D2		*add 30 to get ASCII	
+		MOVE.B	D2,(A0)+	*save in memory and ++
+		BRA	h_to_a		*back to top of loop
+ha_exit		MOVEM.W	(SP)+,D4	*restore registers
+		MOVEM.L (SP)+,A0/D2	
+		RTS
+
+
 
 **********************************************
 * decode - Expects A0 to point to the current instruction
@@ -28,7 +58,7 @@ decode_inst	MOVEM.L	A1-A2/D0-D2,-(SP)
 
 		MOVEM.L	(SP)+,A1-A2/D0-D2	; restore all the registers we used
 
-
+		
 jmp_table	JMP	code0000
 		JMP	code0000
 		JMP	code0001
@@ -69,42 +99,42 @@ code0000	MOVE.W	D2,D0 		; don't need to mask the first 4 because they are alread
 		MOVE.W	osl_addi,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with addi stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 0000_andi	LEA	os_andi,A1	; we got an ANDI, load the string and length
 		MOVE.W	osl_andi,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with andi stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 0000_cmpi	LEA	os_cmpi,A1	; we got an CMPI, load the string and length
 		MOVE.W	osl_cmpi,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with cmpi stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 0000_eori	LEA	os_eori,A1	; we got an EORI, load the string and length
 		MOVE.W	osl_eori,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with eori stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 0000_ori	LEA	os_ori,A1	; we got an ORI, load the string and length
 		MOVE.W	osl_ori,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with ori stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 0000_subi	LEA	os_subi,A1	; we got an SUBI, load the string and length
 		MOVE.W	osl_subi,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with subi stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
 code0001	STOP	#$2700
@@ -213,14 +243,25 @@ code1111	STOP	#$2700
 * sz_76
 * It is very common for bits 7-6 to be the size bits, so the logic
 * to print that has been extracted here. D2 is expected to be the original register.
-* D0 (W) is modified and restored to hold the size bit mask
+* D0 (W) is modified and restored to hold the size bit mask.
+*
+* Since sz_76 is used specifically for immediate instructions, it will copy the immediate
+* operand and then call print_op1
 **********************************************
 sz_76		MOVEM.W	D0,-(SP)	; save registers
 		MOVE.W	D2,D0		; copy the original to the D0
 		ANDI.W	#$00C0,D0	; check bits 7-6 for size
 		ASR.W	#6,D0		; roll it right so it is just a number, 0-2
+		CMPI.W	#2,D0		; if D0 > 2, invalid
+		BGT	sz_76err	; set the error bit
 		BSR	print_3sz	; print out the size
-		MOVEM.W	(SP)+,D0	; restore registers
+		BSR	printi		; print out the immediate operand (first operand)
+		LEA	comma,A1	; print a comma after the first operand
+		MOVE.W	commal,D1	; load the length of the comma
+		BSR	print_instr
+		BRA	sz_76exit	; skip over the error part
+sz_76err	MOVE.B	#1,D6		; set the error bit
+sz_76exit	MOVEM.W	(SP)+,D0	; restore registers
 		RTS			; done
 
 **********************************************
@@ -252,6 +293,56 @@ print_szl	LEA	sz_l,A1		; load size L string address
 		BRA	print_3szc	; continue
 print_3szc	MOVEM.W	(SP)+,D1	; continue with subroutine
 		MOVEM.L	(SP)+,A1
+		RTS
+		
+**********************************************
+* printi - print an immediate
+* D0 - size of the operation (tells it how much to read). This is not modified
+* D3 - internal register for to hold the immediate read. Restored
+* D4 - temporarily stores the number of hex digits in the string. Restored
+*
+* FIXME: is it possible to have a non hex value stored in the immediate?
+**********************************************
+printi		MOVEM.L	D3/A1,-(SP)	; save the internally used registers
+		MOVEM.W	D4/D1,-(SP)
+		CLR.L	D3		; clear out the whole register so we can treat it as the same size once copied into
+		LEA	pound,A1	; print a pound symbol for the immediate
+		MOVE.W	poundl,D1	; load the length of the pound
+		BSR	print_instr
+		CMPI.W	#0,D0		; if its 0, byte operation
+		BEQ	printiw	
+		CMPI.W	#1,D0		; if its 1, word operation
+		BEQ	printil	
+		CMPI.W	#2,D0		; if its 2, long operation
+printib		MOVE.B	(A1)+,D3	; advance the instruction pointer 1 byte, read immediate to D3
+		MOVE.B	#2,D4		; 2 hex nibbles long
+		BRA	printic		; continue
+printiw		MOVE.W	(A1)+,D3	; advance the instruction pointer 1 word, read immediate to D3
+		MOVE.B	#4,D4		; 4 hex nibbles long
+		BRA	printic		; continue
+printil		MOVE.L	(A1)+,D3	; advance the instruction pointer 1 long, read immediate to D3
+		MOVE.B	#8,D4		; 8 hex nibbles long
+printic		MOVEA	A0,A3		; h_to_a messes with A0, lets cache it
+		LEA	imm_str,A0	; we will store it in the immediate string
+		BSR	h_to_a		; h_to_a will take D3 and D4 and store it at imm_str (A0)
+		MOVEA	A0,A1		; print_instr wants the address in A1
+		MOVEA	A3,A0		; put the instruction pointer back in A0
+		MOVE.B	D4,D1		; print_instr wants string length in D1
+		BSR	print_instr
+		MOVEM.W	(SP)+,D4/D1	; restore the internally used register
+		MOVEM.L	(SP)+,D3/A1
+		RTS			; done	
+		
+**********************************************
+* send_ea - Prepare and send out the ea data to decode_ea
+* TODO: this makes assumptions about decode_ea that might be incorrect
+* D0 is a temporary register to hold a mask of the full op word
+**********************************************
+send_ea		MOVEM.W	D0,-(SP)	; save D0
+		MOVE.W	D2,D0		; get a fresh copy of the instruction
+		ANDI.W	#$3F,D0		; we only want the last 6 bits (bit pos 0-5 LSB)
+		BSR	decode_ea	; send it off into ea land, if something went bad, it will set a bad bit
+		MOVEM.W	(SP)+,D0	; restore D0
 		RTS
 
 **********************************************
@@ -340,15 +431,22 @@ osl_subi	osl_subi-os_subi
 os_swap		DC.B	'SWAP'
 osl_swap	osl_swap-os_swap
 
-sz_b		DC.B	'.B'
+sz_b		DC.B	'.B '
 szl_b		szl_b-sz_b
-sz_w		DC.B	'.W'
+sz_w		DC.B	'.W '
 szl_w		szl_w-sz_w
-sz_l		DC.B	'.L'
+sz_l		DC.B	'.L '
 szl_l		szl_b-sz_b
 
+pound		DC.B	'#'
+poundl		poundl-pound
+comma		DC.B	','
+commal		commal-comma
+
+imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
 	END	START		; last line of source
+
 
 
 
