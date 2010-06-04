@@ -165,6 +165,10 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		ANDI.W	#$0FF8,D0	; take 9 bits after the first nibble
 		CMPI.W	#$2100,D0	; 100001000 is SWAP
 		BEQ	0100_swap	; we've found a SWAP
+		MOVE.W	D2,D0		; reload the instruction
+		ANDI.W	#$1C0,D0	; mask off bits 8-6
+		CMPI.W, #$1C0,D0	; 111 is LEA
+		BEQ	0100_lea
 		
 		;TODO: MOVEM or throw an error
 		
@@ -182,14 +186,14 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		MOVE.W	osl_neg,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with neg stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_not	LEA	os_not,A1	; we got a NOT, load the string and length
 		MOVE.W	osl_not,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with not stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 		
 0100_clr	LEA	os_clr,A1	; we got a CLR, load the string and length
@@ -202,13 +206,13 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 0100_jmp	LEA	os_jmp,A1	; we got a JMP, load the string and length
 		MOVE.W	osl_jmp,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with jmp stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_jsr	LEA	os_jsr,A1	; we got a JSR, load the string and length
 		MOVE.W	osl_jsr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with jsr stuff
+		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_swap	LEA	os_swap,A1	; we got a SWAP, load the string and length
@@ -216,6 +220,18 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		BSR	print_instr	; print the instruction to the buffer
 		; TODO: continue on with swap stuff
 		RTS
+
+0100_lea	LEA	os_lea,A1	; we got a LEA, load the string and length
+		MOVE.W	osl_lea,D1	; FIXME: assuming that I/O's function wants them in these regs
+		BSR	print_instr	; print the instruction to the buffer
+		BSR	send_ea		; send the EA stuff off to ea land for printing
+		BSR	send_comma	; comma after the first operand
+		MOVE.W	D2,D0		; reload the buffer
+		ANDI.W	#$E00,D0	; bits 11-9 are the register number
+		ASR.W	#9,D0		; roll it right so it can be treated as a number
+		BSR	send_areg	; print out an address register to the buffer
+		RTS		
+		
 
 code0101	STOP	#$2700
 code0110	BSR	mask_f4		; cache full instruction word into D0
@@ -256,9 +272,7 @@ sz_76		MOVEM.W	D0,-(SP)	; save registers
 		BGT	sz_76err	; set the error bit
 		BSR	print_3sz	; print out the size
 		BSR	printi		; print out the immediate operand (first operand)
-		LEA	comma,A1	; print a comma after the first operand
-		MOVE.W	commal,D1	; load the length of the comma
-		BSR	print_instr
+		BSR	send_comma
 		BRA	sz_76exit	; skip over the error part
 sz_76err	MOVE.B	#1,D6		; set the error bit
 sz_76exit	MOVEM.W	(SP)+,D0	; restore registers
@@ -344,6 +358,49 @@ send_ea		MOVEM.W	D0,-(SP)	; save D0
 		BSR	decode_ea	; send it off into ea land, if something went bad, it will set a bad bit
 		MOVEM.W	(SP)+,D0	; restore D0
 		RTS
+		
+**********************************************
+* send_areg - send an address register string to the buffer
+* saves A1 and D0-D2
+**********************************************
+send_areg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
+		LEA	areg_strs,A1	; load up the A registers table into A1
+		BSR 	g_send_reg	; let the generic method handle the heavy lifting
+		MOVEM.L	(SP)+,D0-D2/A1	; cleanup
+		RTS			; done
+
+**********************************************
+* send_dreg - send an data register string to the buffer
+* saves A1 and D0-D2
+**********************************************	
+send_dreg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
+		LEA	dreg_strs,A1	; load up the D registers table into A1
+		BSR 	g_send_reg	; let the generic method handle the heavy lifting
+		MOVEM.L	(SP)+,D0-D2/A1	; cleanup
+		RTS			; done
+	
+*********************************************
+* g_send_reg - Generic send reg, expects A1 to hold the starting address of the table
+* NEVER called directly, always called through send_areg or send_dreg
+* D0 is the address count TODO: error check it here? I guess its impossible to exceed the number of registers
+* indexes into the array of registers and appends it to the buffer
+* note that this does NOT clean up after itself because it is meant to be called within the context of one
+* of the send_*reg methods
+*********************************************
+g_send_reg	ANDI.W	$00FF,D0	; mask away the 8 MSBs of the word. We have to use a word size but there could be extra data in there
+		MULU.B	#2,D0		; multiply offset by the length of each reg string
+		MOVE.W, #2,D1 		; d1 holds the length, which is always 2 for a register
+		LEA	(A1,D0.W),A1	; index in by the offset
+		BSR	print_instr	; defer to print_instr to load it into the buffer
+		RTS			; done
+
+**********************************************
+* send a comma off to the buffer
+**********************************************
+send_comma	LEA	comma,A1	; print a comma after the first operand
+		MOVE.W	commal,D1	; load the length of the comma
+		BSR	print_instr
+		RTS
 
 **********************************************
 * mask_f4
@@ -394,7 +451,7 @@ os_jmp		DC.B	'JMP'
 osl_jmp		osl_jmp-os_jmp
 os_jsr		DC.B	'JSR'
 osl_jsr		osl_jsr-os_jsr
-os_lea		DC.B	'LEA'
+os_lea		DC.B	'LEA '
 osl_lea		osl_lea-os_lea
 os_lsr		DC.B	'LSR'
 osl_lsr		osl_lsr-os_lsr
@@ -445,7 +502,14 @@ commal		commal-comma
 
 imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
+*********************
+* Register strings
+*********************
+areg_strs	DC.B  	'A0','A1','A2','A3','A4','A5','A6','A7'
+dreg_strs	DC.B  	'D0','D1','D2','D3','D4','D5','D6','D7'
+
 	END	START		; last line of source
+
 
 
 
