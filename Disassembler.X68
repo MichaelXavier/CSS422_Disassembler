@@ -399,6 +399,7 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		ANDI.W	#$0FF8,D0	; take 9 bits after the first nibble
 		CMPI.W	#$2100,D0	; 100001000 is SWAP
 		BEQ	0100_swap	; we've found a SWAP
+		BSR	extr_opmode	; we happen to need bits 8-6
 		MOVE.W	D2,D0		; reload the instruction
 		ANDI.W	#$1C0,D0	; mask off bits 8-6
 		CMPI.W, #$1C0,D0	; 111 is LEA
@@ -466,8 +467,8 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		BSR	send_areg	; print out an address register to the buffer
 		RTS		
 		
-
 code0101	STOP	#$2700
+
 code0110	BSR	mask_f4		; cache full instruction word into D0
 		CMPI.W	#$100,D0	; if the next 4 are 0001, its a BSR
 		BEQ	0110_bsr
@@ -481,11 +482,104 @@ code0110	BSR	mask_f4		; cache full instruction word into D0
 		RTS
 		
 code0111	STOP	#$2700
-code1000	STOP	#$2700 		; FIXME: this is either an OR or its bad
-code1001	STOP	#$2700
+code1000	BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
+		ANDI	#3,D0		; check last 2 bits
+		CMPI.B	#3,D0		; if they are set, bad instruction
+		BNE	1000_or		; if not, we've got an OR
+		MOVE.B	#1,D6		; error!
+		RTS
+		
+1000_or		LEA	os_or,A1	; we got a OR, load the string and length
+		MOVE.W	osl_or,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: more sub stuff
+		BSR
+
+
+code1001	BSR 	extr_opmode	; opmode will differentiate between SUB and SUBA
+		ANDI	#3,D0		; check last 2 bits
+		CMPI.B	#3,D0		; if the last 2 bits are 11, SUBA
+		BEQ	1001_suba	; otherwise, fall through sub
+		
+1001_sub	LEA	os_sub,A1	; we got a SUB, load the string and length
+		MOVE.W	osl_sub,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: more sub stuff
+		BSR
+		
+1001_suba	LEA	os_suba,A1	; we got a SUBA, load the string and length
+		MOVE.W	osl_suba,D1
+		BSR	print_instr	; print the instruction to the buffer
+		;TODO more SUBA stuff
+		RTS
+
+
 code1010	STOP	#$2700
-code1011	BRA	code1011 ;FIXME
-code1101	STOP	#$2700
+code1011	BSR	extr_opmode	; opmode differentiates between CMP,CMPA,EOR
+		CMPI.B	#2,D0		; 000-010 is CMP
+		BLS	1011_cmp
+		CMPI.B	#3,D0		; 011 and 111 are cmpa
+		BEQ	1011_cmpa
+		CMPI.B	#7,D0
+		BEQ	1011_cmpa 	; otherwise fall through to eor
+
+1011_eor	LEA	os_eor,A1	; we got a EOR, load the string and length
+		MOVE.W	osl_eor,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO more EOR stuff
+		RTS
+1011_cmpa	LEA	os_cmpa,A1	; we got a CMPA, load the string and length
+		MOVE.W	osl_cmpa,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: more cmpa stuff
+		RTS
+1011_cmp	LEA	os_cmp,A1	; we got a CMP, load the string and length
+		MOVE.W	osl_cmp,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: more cmpa stuff
+		RTS
+		
+code_1100	ANDI.W	#$1F8,D0	; take off bits 8-3
+		CMPI	#$140,D0	; the pattern 101000 there is EXG
+		BEQ	1100_exg
+		CMPI	#$148,D0	; the pattern 101001 there is EXG
+		BEQ	1100_exg
+		CMPI	#$188,D0	; the pattern 110001 there is EXG
+		BEQ	1100_exg	; otherwise, fall through to AND
+
+1100_and	LEA	os_and,A1	; we got an AND, load the string and length
+		MOVE.W	osl_and,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO more AND stuff
+		RTS
+		
+1100_exg	LEA	os_exg,A1	; we got a EXT, load the string and length
+		MOVE.W	osl_exg,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO more EXG stuff
+		RTS
+		
+code1101	BSR	extr_opmode	; opmode differentiates between ADD and ADDA
+		CMPI.B	#3,D0		; 011 and 111 are ADDA
+		BEQ	1011_adda
+		CMPI.B	#7,D0
+		BEQ	1011_adda 	; otherwise fall through to ADDA
+
+1101_add	LEA	os_add,A1	; we got a ADD, load the string and length
+		MOVE.W	osl_add,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO more ADD stuff
+		RTS
+1101_adda	LEA	os_add,A1	; we got a ADDA, load the string and length
+		MOVE.W	osl_add,D1
+		BSR	print_instr	; print the instruction to the buffer
+		; TODO: more adda stuff
+		RTS
+
+
+
+
+
 code1110	STOP	#$2700
 code1111	STOP	#$2700
 
@@ -644,6 +738,16 @@ send_comma	LEA	comma,A1	; print a comma after the first operand
 mask_f4		MOVE.W	D2,D0		; return value will be in D0. used internally so thats OK
 		ANDI.W	#$0FFF,D0	; done
 		RTS
+	
+**********************************************
+* extr_opmode
+* Given the original instruction is in D2, masks out
+* bits 8-6, rolls them right and puts them in D0 to be dealt with
+**********************************************
+extr_opmode	MOVE.W	D2,D0		; return value will be in D0. Used internally so thats OK
+		ANDI.W	#$1C0,D0	; we only want bits 8-6
+		ASR.W	#6,D0		; roll it right 6 times to treat it as a number
+		RTS
 
 * Variables and Strings
 **********************************************
@@ -781,6 +885,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 *~Font name~Courier New~
 *~Font size~10~
