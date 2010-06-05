@@ -7,6 +7,223 @@
 	ORG	$1000
 START:				; first instruction of program
 
+
+		OPT		CRE		*so I can see Symbol Table
+CR		EQU		$0D		*ASCII for carriage return
+LF		EQU		$0A		*ASCII for line feed
+task0		EQU		00		*to hold task 0
+task1		EQU		01		*to hold task 1
+task2		EQU		02		*to hold task 2
+start		EQU		$1000		*to hold start address
+addSz		EQU		08		*to hold size of an address
+stack		EQU		$00100000	*stack location
+evenAnd		EQU		$00000001	*to use for evenCk subroutine
+strtAd		EQU		$00002000	*region program can start
+endAd		EQU		$000FFFFF	*region program can end
+region		EQU		80		*decimal number 80 to help fill 
+space		EQU		$20		*to hold ASCII for space
+D		EQU		$44		*to hold ASCII for D
+A		EQU		$41		*to hold ASCII for A
+T		EQU		$54		*to hold ASCII for T
+
+
+		ORG		start		*start of program
+		LEA		stack,SP	*stack pointer in A7/SP
+	
+		MOVE.B		#task0,D0	*D0 hols task0, print w CR
+		LEA		intro,A1	*A1 holds intro string
+		MOVE.W		introL,D1	*D1 holds length of intro string
+		TRAP		#15		*do it
+		
+stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
+		LEA		stAdd,A1	*A1 holds string asking for start
+		MOVE.W		stAddL,D1	*D1 holds length of start string
+		TRAP		#15		*do it
+		
+		MOVE.B		#task2,D0	*D0 holds task2, take input
+		LEA		data1,A1	*to hold input string
+		TRAP		#15		*string ptr in A1,length in D1
+		CMPI.B		#00,D1		*compare D1 and 0
+		BLE		badSt		*if less than or equal to 0 
+		CMPI.B		#addSz,D1	*compare D1 and 8
+		BGT		badSt		*if larger than 8 go to badSt
+		CLR.L		D7		*clear D7
+		BSR		a_to_h		*convert to hex
+		CMPI.B		#01,D6		*check if D6 holds a 1/bad flag
+		BEQ		badSt		*is bad go to badSt
+		BSR		evenCk		*need to check if address is even 
+		CMPI.L		#strtAd,D7	*compare start and D7
+		BLT		badSt		*if smaller then is a bad address
+		CMPI.L		#endAd,D7	*if end address is smaller, bad
+		BGE		badSt		*if start is larger than end, bad
+		MOVE.L		D7,istart	*istart holds valid start address in hex
+		BRA		endSec		*go to end sequence
+
+badSt		MOVE.B		#0,D6		*reset bad flag
+		MOVE.B		#task0,D0	*D0 holds task2, print w CR
+		LEA		stErr,A1	*A1 holds error string
+		MOVE.W		stErrL,D1	*D1 holds length of start error string
+		TRAP		#15		*do it
+		BRA		stSec		*back to start sequence for reprompt
+
+endSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
+		LEA		endAdd,A1	*A1 holds string asking for start
+		MOVE.W		endAddL,D1	*D1 holds length of start string
+		TRAP		#15		*do it
+		
+		MOVE.B		#task2,D0	*D0 holds task2, take input
+		LEA		data2,A1	*to hold input string
+		TRAP		#15		*string ptr in A1,length in D1
+		CMPI.B		#00,D1		*compare D1 and 0
+		BLE		badSt		*if less than or equal to 0 
+		CMPI.B		#addSz,D1	*compare D1 and 8
+		BGT		badSt		*if larger than 8 go to badSt
+		CLR.L		D7		*clear D7
+		BSR		a_to_h		*convert to hex
+		CMPI.B		#01,D6		*check if D6 holds a 1/bad flag
+		BEQ		badEnd		*is bad go to badSt
+		CMPI.L		#endAd,D7	*compare end address and D7
+		BGT		badEnd		*if larger, it's invalid
+		MOVE.L		istart,D6	*move istart to D6
+		CMP.L		D6,D7		*compare istart and end address
+		BLE		badEnd		*if it's less than or equal, bad
+		MOVE.L		D7,iend		*istart holds valid start address in hex
+
+badEnd		MOVE.B		#0,D6		*reset bad flag
+		MOVE.B		#task0,D0	*D0 holds task2, print w CR
+		LEA		endErr,A1	*A1 holds error string
+		MOVE.W		endErrL,D1	*D1 holds length of start error string
+		TRAP		#15		*do it
+		BRA		endSec		*back to end sequence for reprompt
+		
+		STOP		#$2700		*back to simulator
+*******************************************************************************
+* Subroutine:		a_to_h
+* Description:		converts a ascii string to a hex value
+* Precondition:		assumes A1 is a pointer to the string, and D1 holds 
+*			string's length, and D7 is cleared
+* Postcondition:	will return the hex value in D7, if invalid characters
+*			in the string D6 will be set to 1
+*			A1 and D1 will be modified
+*			Internally will use D2, so pushes that on stack
+*******************************************************************************
+	
+a_to_h		MOVEM.L		D2,-(SP)	*put utility register on stack
+a_to_hSt	CMPI.B		#00,D1		*if D1 is 0 done
+		BEQ		exit		*if done exit
+		SUBI.B		#01,D1		*update counter
+		ROL.L		#4,D7		*prepare register to take next hex
+		MOVE.B		(A1)+,D2	*D2 holds next byte to convert
+		CMPI.B		#$30,D2		*compare 30 to D2 if 
+		BLT		badEx		*is ASCII is less than 30 bad
+		CMPI.B		#$39,D2		*if equal or less than 39
+		BLE		ah_num		*convert a number
+		CMPI.B		#$40,D2		*if D2 is $40 invalid
+		BLE		badEx		*then bad and exit
+		CMPI.B		#$46,D2		*compare D2 to $46
+		BLE		ah_uc		*convert to hex letter
+		CMPI.B		#$61,D2		*compare D2 to $61
+		BLT		badEx		*if less than bad and exit
+		CMPI.B		#$66,D2		*compare D2 to $66
+		BLE		ah_lc		*if less than or equal convert to HEX
+		BRA		badEx		*if haven't coverted here, it's invalid
+ah_num		SUBI.B		#$30,D2		*convert a number
+		OR.B		D2,D7		*add hex digit to D7
+		BRA		a_to_hSt		*back to loop
+ah_lc		SUBI.B		#$57,D2		*convert to Hex letter
+		OR.B		D2,D7		*add hex digit to D7
+		BRA		a_to_hSt	*back to loop
+ah_uc		SUBI.B		#$37,D2		*convert to Hex letter
+		OR.B		D2,D7		*add hex digit to D7
+		BRA		a_to_hSt	*back to loop
+badEx		MOVE.B		#01,D6		*set bad flag
+		BRA		exit		*then exit
+exit		MOVEM.L		(SP)+,D2	*pop register off stack
+		RTS				*return from subroutine	
+
+*******************************************************************************
+* Subroutine:		evenCk
+* Description:		checks if Hex address is even or odd
+* Precondition:		assumes D7 holds address
+* Postcondition:	if even, nothing will change
+*			if odd, will add one to D7 and return it
+*			Internally will use D2, so pushes that on stack
+*			will not affect good bad flag, will return D7
+*******************************************************************************
+evenCk		MOVEM.L		D2,-(SP)	*put utility register on stack
+		MOVE.L		D7,D2		*move D7 to D2
+		ANDI.L		#evenAnd,D2	*and $00000001 with D2
+		CMPI.L		#00,D2		*if D2 is 0 then value was odd
+		BEQ		even		*if D2 equals 0 it was even	
+		ADDI.L		#01,D7		*if was odd add one to D7 
+		BRA		even		*done
+even		MOVEM.L	(SP)+,D2		*pop resister off stack		
+		RTS				*return from subroutine
+		
+*******************************************************************************
+* Subroutine:		fillBuf
+* Description:		subroutine that fills region with ASCII character 20
+*			which is spaces
+* Precondition:		assumes D0 is set with number of bytes, counter
+*			assumes A0 points at first byte in region to fill
+* Postcondition:	region will be filled with spaces
+*			D0 and A0 will be modified
+*			no return value, no use of good/bad flag, no use of 
+*			internal registers
+*			nothing pushed on stack		
+*******************************************************************************
+fillBuf		CMPI.W	#00,D0			*see if D0 is empty
+		BEQ	exit			*if empty exit
+		MOVE.B	#space,(A0)+		*copy space and ++
+		SUBI.W	#01,D0			*update counter
+		BRA	fillBuf			*branch to top of routine
+exit		RTS				*return to subroutine
+
+*******************************************************************************
+* Subroutine:		print_instr
+* Description:		subroutine that takes a string and copies it to a
+*			buffer/memory
+* Preconditions:	A0 points to buffer,A1 points to string, and D1 holds
+*			length of string in words
+* Postconditions:	string will be added to memory/buffer, A0 now points to
+*			end of string
+*			internally will use register D0
+*			A1,D0, and D1 will be pushed to stack
+*******************************************************************************
+print_instr	MOVEM.L	A1/D0/D1,-(SP)	*push to stack
+prtInL		CMPI.B	#00,D1		*compare 0 to counter
+		BEQ	done		*if 0, done
+		MOVE.W	(A1)+,D0	*move next word to data register
+		MOVE.W	D0,(A0)+	*move next word from register to buffer
+		SUBI.B	#01,D1		*update counter
+		BRA	prtInL		*back to loop
+done		MOVEM.L	(SP)+,A1/D0/D1	*restore stack	
+		RTS			*return from subroutine
+		
+*******************************************************************************
+* Subroutine:		printAsm
+* Description:		subroutine that adds CR,LF to a buffer, then prints an
+*			instruction on that buffer.  Assumes buffer is 
+*			populated with a string of ASCII characters
+* Precondition:		A0 points to end of instruction where CR,LF needs
+*			A1 points to start of instruction on buffer
+*			to be added
+* Postcondition:	instruction will be printed to screen
+*			internally will use A2,D0-D2
+*			A0-A2 and D0-D2 will be pushed to stack
+*******************************************************************************
+printAsm	MOVEM.L	A0-A2/D0-D2,-(SP)	*push to stack
+		MOVE.B	#CR,(A0)+	*put CR on buffer
+		MOVE.B	#LF,(A0)+	*put LF on buffer
+		MOVEA.L	A0,A2		*move A0 to A2
+		SUBA.L	A1,A2		*length of string now in A2
+		MOVE.W	A0,D1		*now D1 holds length of string
+		MOVE.B	#task0,D0	*D0,A1, and D1 sb set
+		TRAP	#15		*do it
+		MOVEM.L	(SP)+,A0-A2/D0-D2	*restore stack
+		RTS			*return from subroutine		
+		
+
 *******************************************************************************
 *	Subroutine:	h_to_a
 *	Description:	takes Hex value, separates into individual Hex digits
@@ -35,6 +252,23 @@ h_to_a		MOVEM.L	A0/D2,-(SP)	;save D2 and A0
 ha_exit		MOVEM.W	(SP)+,D4	*restore registers
 		MOVEM.L (SP)+,A0/D2	
 		RTS
+		
+*******************************************************************************
+* Subroutine:		data
+* Description:		subroutine that puts the word DATA onto a buffer in 
+*			ASCII
+* Precondition:		assumes A0 points to region where want DATA to be put
+* Postcondition:	next four bytes will contain ASCII for DATA and A0 
+*			will be changed
+*			no return value, no use of good/bad flag, no use of 
+*			internal registers
+*******************************************************************************
+data		MOVE.B	#D,(A0)+		*move D to memory and ++
+		MOVE.B	#A,(A0)+		*move A to memory and ++
+		MOVE.B	#T,(A0)+		*move T to memory and ++
+		MOVE.B	#A,(A0)			*move A to memory
+		RTS				*return from subroutine
+
 
 
 
@@ -508,18 +742,45 @@ imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex 
 areg_strs	DC.B  	'A0','A1','A2','A3','A4','A5','A6','A7'
 dreg_strs	DC.B  	'D0','D1','D2','D3','D4','D5','D6','D7'
 
-	END	START		; last line of source
 
+*******************************************************************************
+*	Data area
+*******************************************************************************
+intro		DC.B		'Team M&N Disassembler',CR,LF
+introL		DC.W		introL-intro	*length of intro message string
+stAdd		DC.B		'Please enter valid start address',CR,LF
+		DC.B		'start address must be above $00002000   '
+stAddL		DC.W		stAddL-stAdd	*length of start address message string
+endAdd		DC.B		'Please enter valid end address',CR,LF
+		DC.B		'end address must be below $000FFFFF',CR,LF
+		DC.B		'end address must be at least 1 word larger than start address   '
+endAddL		DC.W		endAddL-endAdd	*lenght of end address message string
+*******************************************************************************
+*	Error Messages
+*******************************************************************************
+stErr		DC.B		'You entered and invalid start address',CR,LF
+		DC.B		'start address must be above $00002000',CR,LF
+		DC.B		'and below $000FFFFF',CR,LF,CR,LF
+stErrL		DC.W		stErrL-stErr	*length of start error message string
+endErr		DC.B		'You entered and invalid end address',CR,LF
+		DC.B 		'end address must be at least one word larger than start address',CR,LF
+		DC.B		'and smaller than $000FFFFF',CR,LF
+endErrL		DC.W		endErrL-endErr	*length of end error message string
+*******************************************************************************
+*	Input storage area
+*******************************************************************************
+data1		DS.B	20	*to hold input of start address
+data2		DS.B	20	*to hold input of end address
+istart		DS.L	1	*holds start address in hex
+iend		DS.L	1	*holds end address in hex
 
+goodBuf		DS.B	80		*reserves 80 bytes to hold good buffer
+badBuf		DS.B	80		*reserves 80 bytes to hold bad buffer
+	
+headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
+headrL		DC.W	headrL-headr		*holds length of header string
 
-
-
-
-
-
-
-
-
+		END		start
 
 *~Font name~Courier New~
 *~Font size~10~
