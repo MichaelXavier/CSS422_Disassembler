@@ -461,9 +461,7 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_ea		; send the EA stuff off to ea land for printing
 		BSR	send_comma	; comma after the first operand
-		MOVE.W	D2,D0		; reload the buffer
-		ANDI.W	#$E00,D0	; bits 11-9 are the register number
-		ASR.W	#9,D0		; roll it right so it can be treated as a number
+		BSR	reg_119		; extract the register field and save it to D0
 		BSR	send_areg	; print out an address register to the buffer
 		RTS		
 		
@@ -492,9 +490,8 @@ code1000	BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
 1000_or		LEA	os_or,A1	; we got a OR, load the string and length
 		MOVE.W	osl_or,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: more sub stuff
-		BSR
-
+		BSR	send_86op	; handle the op generically from this point forward
+		RTS			; done
 
 code1001	BSR 	extr_opmode	; opmode will differentiate between SUB and SUBA
 		ANDI	#3,D0		; check last 2 bits
@@ -504,15 +501,14 @@ code1001	BSR 	extr_opmode	; opmode will differentiate between SUB and SUBA
 1001_sub	LEA	os_sub,A1	; we got a SUB, load the string and length
 		MOVE.W	osl_sub,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: more sub stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		BSR
 		
 1001_suba	LEA	os_suba,A1	; we got a SUBA, load the string and length
 		MOVE.W	osl_suba,D1
 		BSR	print_instr	; print the instruction to the buffer
-		;TODO more SUBA stuff
-		RTS
-
+		BSR	send_86op	; handle the op generically from this point forward
+		RTS			; done
 
 code1010	STOP	#$2700
 code1011	BSR	extr_opmode	; opmode differentiates between CMP,CMPA,EOR
@@ -526,17 +522,17 @@ code1011	BSR	extr_opmode	; opmode differentiates between CMP,CMPA,EOR
 1011_eor	LEA	os_eor,A1	; we got a EOR, load the string and length
 		MOVE.W	osl_eor,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO more EOR stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 1011_cmpa	LEA	os_cmpa,A1	; we got a CMPA, load the string and length
 		MOVE.W	osl_cmpa,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: more cmpa stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 1011_cmp	LEA	os_cmp,A1	; we got a CMP, load the string and length
 		MOVE.W	osl_cmp,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: more cmpa stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 		
 code_1100	ANDI.W	#$1F8,D0	; take off bits 8-3
@@ -550,7 +546,7 @@ code_1100	ANDI.W	#$1F8,D0	; take off bits 8-3
 1100_and	LEA	os_and,A1	; we got an AND, load the string and length
 		MOVE.W	osl_and,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO more AND stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 		
 1100_exg	LEA	os_exg,A1	; we got a EXT, load the string and length
@@ -568,12 +564,12 @@ code1101	BSR	extr_opmode	; opmode differentiates between ADD and ADDA
 1101_add	LEA	os_add,A1	; we got a ADD, load the string and length
 		MOVE.W	osl_add,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO more ADD stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 1101_adda	LEA	os_add,A1	; we got a ADDA, load the string and length
 		MOVE.W	osl_add,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: more adda stuff
+		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 
 
@@ -590,7 +586,7 @@ code1111	STOP	#$2700
 * D0 (W) is modified and restored to hold the size bit mask.
 *
 * Since sz_76 is used specifically for immediate instructions, it will copy the immediate
-* operand and then call print_op1
+* operand and then call print_3sz
 **********************************************
 sz_76		MOVEM.W	D0,-(SP)	; save registers
 		MOVE.W	D2,D0		; copy the original to the D0
@@ -605,6 +601,45 @@ sz_76		MOVEM.W	D0,-(SP)	; save registers
 sz_76err	MOVE.B	#1,D6		; set the error bit
 sz_76exit	MOVEM.W	(SP)+,D0	; restore registers
 		RTS			; done
+		
+**********************************************
+* reg_119 - extract register bits from bits 11-9 and
+* saves them to D0. Assumes the original is in D2
+**********************************************
+reg_119		MOVE.W	D2,D0		; reload the buffer
+		ANDI.W	#$E00,D0	; bits 11-9 are the register number
+		ASR.W	#9,D0		; roll it right so it can be treated as a number
+		RTS			; done
+		
+**********************************************
+* send_86op - send the size and both operands in the format where 8-6 are
+* the opmode bits that indicate either <EA>,Dv or Dv,<EA>
+* modifies the D0 register to hold the full opcode and restores it when done
+* expects D2 to hold the full opcode
+* D3 used temporarily and is restored
+**********************************************
+send_86op	MOVEM.W	D0/D3,-(SP)	; save registers
+		BSR	extr_opmode	; take bits 8-6 to look at the opmode and put them into D0
+		MOVE.W	D0,D3		; cache opmode
+		CMPI.B	#4,D0		; D0 <= 4, no offset needed
+		BLS	s86_cont	; modes 0 or 4, 1 or 5, 2 or 6 are B, W and L  respectively
+		SUBI.B	#4,D0		; offset D0 by 4 to get the proper register number
+s86_cont	BSR	print3sz	; continue with operations, print the size
+		; use d3 as the register size 
+		MOVE.W	D3,D0		; load the opmode again
+		CMPI.B	#4,D0		; D0 <= 4 EA comes first
+		BLS	s86_o1ea	; otherwise, dreg first
+		BSR	reg_119		; extract the register from bits 11-9
+		BSR	send_dreg	; send a D register to the buffer
+		BSR	send_comma	; comma after the first operand
+		BSR	send_ea		; ea is the second operand
+		BRA	s86_exit					
+s86_o1ea	BSR	send_ea		; ea is the first operand
+		BSR	send_comma	; comma after the first operand
+		BSR	reg_119		; extract the register from bits 11-9
+		BSR	send_dreg	; send a D register to the buffer then fall through to exit		
+s86_exit	MOVEM.W	(SP)+,D0/D3	; restore registers
+		RTS
 
 **********************************************
 * print_3sz
@@ -885,6 +920,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 *~Font name~Courier New~
