@@ -269,9 +269,6 @@ data		MOVE.B	#D,(A0)+		*move D to memory and ++
 		MOVE.B	#A,(A0)			*move A to memory
 		RTS				*return from subroutine
 
-
-
-
 **********************************************
 * decode - Expects A0 to point to the current instruction
 * D2 is the unmodified opcode WORD
@@ -371,9 +368,81 @@ code0000	MOVE.W	D2,D0 		; don't need to mask the first 4 because they are alread
 		BSR	send_ea		; send the ea into ea land
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
-code0001	STOP	#$2700
-code0010	STOP	#$2700
-code0011	STOP	#$2700
+code0001	BSR	extr_opmode	; pull out 8-6 bits into D0
+		CMPI.W	#$80,D0		; 001 is a MOVEA and isn't allowed with this size
+		BNE	code0001c	; continue if not a match
+		MOVE.W	#1,D6		; error!
+		RTS			; bail out	
+code0001c	LEA	os_move,A1	; we got an MOVE.B, load the string and length
+		MOVE.W	osl_move,D1	
+		BSR	print_instr	; print the instruction to the buffer
+		LEA	sz_b,A1		; load size B string address
+		MOVE.W	szl_b,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		; TODO: rejoin other MOVES and handle the rest
+
+code0010	BSR	extr_opmode	; pull out 8-6 bits into D0
+		CMPI.W	#$80,D0		; 001 is a MOVEA
+		BNE	0010_movel
+		LEA	jb_movea,A4	; save the jumpback to A4
+		LEA	os_movea,A1	; we got an MOVEA.L, load the string and length
+		MOVE.W	osl_movea,D1	
+		BSR	print_instr	; print the instruction to the buffer
+		BRA	0010_cnt	; continue
+		
+0100_movel	LEA	os_move,A1	; we got an MOVE.L, load the string and length
+		MOVE.W	osl_move,D1	
+		BSR	print_instr	; print the instruction to the buffer
+		LEA	jb_move,A4	; set the jumpback to A4		
+
+0010_cnt	LEA	sz_l,A1		; load size L string address
+		MOVE.W	szl_l,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		BSR	reg_119		; extract the register
+		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle the regs independently
+		
+
+code0011	BSR	extr_opmode	; pull out 8-6 bits into D0
+		CMPI.W	#$80,D0		; 001 is a MOVEA
+		BNE	0011_movew
+		LEA	jb_movea,A4	; save the jumpback to A4
+		LEA	os_movea,A1	; we got an MOVEA.W, load the string and length
+		MOVE.W	osl_movea,D1	
+		BSR	print_instr	; print the instruction to the buffer
+		BRA	0011_cnt	; continue
+
+
+0011_movew	LEA	os_move,A1	; we got an MOVE.W, load the string and length
+		MOVE.W	osl_move,D1	
+		BSR	print_instr	; print the instruction to the buffer
+		LEA	jb_move,A4	; set the jumpback to A4		
+
+0011_cnt	LEA	sz_l,A1		; load size L string address
+		MOVE.W	szl_l,D1	; load the string length
+		BSR 	print_instr	; print out the size
+		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle their cases independently
+		
+jb_move		; FIXME: apparently the dest EA not only comes first but transposes the halves. this is handled below but I don't know if swapping the halves alone will solve it
+		BSR	send_ea		; ea at the lsb end is the *source* according to the manual
+		BSR	send_comma	; first operand handled
+		MOVE.W	D2,D0		; reload the instruction
+		ANDI.W	#$FC0,D0	; we want EA bits 11-6, we are going to flip the two halves of bits 11-6
+		MOVE.W	D0,D1		; make a copy to D1 to swap ea halves
+		ANDI.W	#$1C0,D0	; just the lsb 3
+		ANDI.W	#$E00,D1	; just the msb 3
+		LSL.W	#3,D0		; shift the right one left and the left one right
+		LSR.W	#3,D1
+		OR.W	D1,D0		; combine them
+		LSR.W	#6,D0		; roll the whole chunk right to be treated as a number
+		BSR	decode_ea	; send D0 off into ea land, if something went bad, it will set a bad bit
+		RTS
+
+jb_movea	BSR	send_ea		; EA at the end is the source, do it first
+		BSR	send_comma	; first operand handled
+		BSR	reg_119		; extract the register
+		BSR	send_areg	; send the destination as an address register
+		RTS
+		
 
 code0100	BSR	mask_f4		; cache full instruction word into D0
 		CMPI.W	#$E71,D0	; 111001110001 remainder is nop
@@ -404,11 +473,37 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		ANDI.W	#$1C0,D0	; mask off bits 8-6
 		CMPI.W, #$1C0,D0	; 111 is LEA
 		BEQ	0100_lea
+		MOVE.W	D2,D0		; reload the instruction
+		BTST.L	#11,D0		; if bit 11 isn't set, it can't be a movem so we don't support it
+		BNE	0100_err	; error!
+		ANDI.W	#$380,D0	; check if bits 9-7 are 001
+		CMPI.W	#$80,D0
+		BNE	0100_err
+0100_movem	LEA	os_movem,A1	; we got a MOVEM, load the string and length
+		MOVE.W	osl_movem,D1
+		BSR	print_instr	; print the instruction to the buffer
+		MOVE.W	D2,D0		; reload the instruction
+		BTST.L	#6,D0		; size field, 0 for word, 1 for long
+		BEQ	0100_moveml	; long
+0100_movemw	LEA	sz_w,A1		; load size W string address
+		MOVE.W	szl_w,D1	; load the string length
+		BRA	0100_movemc	; continue		
+0100_moveml	LEA	sz_l,A1		; load size L string address
+		MOVE.W	szl_l,D1	; load the string length
+0100_movemc	BSR 	print_instr	; print out the size
+		BTST.L	#10,D0		; direction. if 0, reg to mem, else mem to reg
+		BEQ	0100_movemr
+0100_movemm	;TODO mem to reg, this is going to SUCK for EA
+0100_movemr	;TODO reg to mem, this will too
+		RTS
+
+0100_err	MOVE.W 	#1,D6		; error!
+		RTS
 		
 		;TODO: MOVEM or throw an error
 		
 0100_nop	LEA	os_nop,A1	; we got a NOP, load the string and length
-		MOVE.W	osl_nop,D1	; FIXME: assuming that I/O's function wants them in these regs
+		MOVE.W	osl_nop,D1
 		BSR	print_instr	; print the instruction to the buffer
 		RTS			; FIXME: does this break all the way out of decode_inst?
 
@@ -435,7 +530,7 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		MOVE.W	osl_clr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
-		; TODO: continue on with clr stuff
+		BSR	send_ea
 		RTS			; FIXME: does this break all the way out of decode_inst?		
 
 0100_jmp	LEA	os_jmp,A1	; we got a JMP, load the string and length
@@ -453,7 +548,9 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 0100_swap	LEA	os_swap,A1	; we got a SWAP, load the string and length
 		MOVE.W	osl_swap,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with swap stuff
+		MOVE.W	D2,D0		; reload the instruction
+		ANDI.W	#7,D0		; we only want the last 3 bits for the register
+		BSR	send_dreg	; send out the dreg and we're done
 		RTS
 
 0100_lea	LEA	os_lea,A1	; we got a LEA, load the string and length
@@ -978,6 +1075,8 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
+
 
 
 
