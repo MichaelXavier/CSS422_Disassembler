@@ -223,7 +223,7 @@ printAsm	MOVEM.L	A0-A2/D0-D2,-(SP)	*push to stack
 		MOVEM.L	(SP)+,A0-A2/D0-D2	*restore stack
 		RTS			*return from subroutine		
 		
-
+'
 *******************************************************************************
 *	Subroutine:	h_to_a
 *	Description:	takes Hex value, separates into individual Hex digits
@@ -480,7 +480,7 @@ code0110	BSR	mask_f4		; cache full instruction word into D0
 		RTS
 		
 code0111	STOP	#$2700
-code1000	BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
+code100		BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
 		ANDI	#3,D0		; check last 2 bits
 		CMPI.B	#3,D0		; if they are set, bad instruction
 		BNE	1000_or		; if not, we've got an OR
@@ -535,7 +535,8 @@ code1011	BSR	extr_opmode	; opmode differentiates between CMP,CMPA,EOR
 		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 		
-code_1100	ANDI.W	#$1F8,D0	; take off bits 8-3
+code_1100	MOVE.W	D2,D0		; reload the instruction
+		ANDI.W	#$1F8,D0	; take off bits 8-3
 		CMPI	#$140,D0	; the pattern 101000 there is EXG
 		BEQ	1100_exg
 		CMPI	#$148,D0	; the pattern 101001 there is EXG
@@ -572,11 +573,68 @@ code1101	BSR	extr_opmode	; opmode differentiates between ADD and ADDA
 		BSR	send_86op	; handle the op generically from this point forward
 		RTS
 
+code1110	MOVE.W	D2,D0		; reload the instruction
+		ANDI.W	#$18,D0		; extract bits 4 and 3 to determine the opcode
+		LSR.W	#3,D0		; roll it right 3 so it can be treated as a number
+		CMPI.W	#9,D0		; if its 00, ASL/ASR
+		BEQ	1110_as
+		CMPI.W	#1,D0		; if its 01, LSL/LSR
+		BEQ	1110_ls
+		CMPI.W	#3,D0		; if its 11, ROL/ROR
+		BEQ	1110_ls
+		MOVE.B	#1,D6		; error!
+		RTS			; FIXME: do i need to do a subroutine to handle error or just rts with bad bit?
+1110_as		MOVE.W	D2,D0
+		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
+		BEQ	1110_asl
+1110_asr	LEA	os_asr		; we got an ASR, load the string and length
+		MOVE.W	osl_asr,D1
+		BRA	1110_cnt	; continue
+1110_asl	LEA	os_asl,A1	; we got an ASL, load the string and length
+		MOVE.W	osl_asl,D1
+		BRA	1110_cnt	; continue
+		
+1110_ls		MOVE.W	D2,D0
+		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
+		BEQ	1110_lsl
+1110_lsr	LEA	os_lsr		; we got an LSR, load the string and length
+		MOVE.W	osl_lsr,D1
+		BRA	1110_cnt	; continue
+1110_lsl	LEA	os_lsl,A1	; we got an LSL, load the string and length
+		MOVE.W	osl_lsl,D1
+		BRA	1110_cnt	; continue
 
+1110_ro		MOVE.W	D2,D0
+		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
+		BEQ	1110_rol
+1110_ror	LEA	os_ror		; we got an ROR, load the string and length
+		MOVE.W	osl_ror,D1
+		BRA	1110_cnt	; continue
+1110_rol	LEA	os_rol,A1	; we got an ROL, load the string and length
+		MOVE.W	osl_rol,D1
 
-
-
-code1110	STOP	#$2700
+1110_cnt	BSR	sz_76		; handle the size and add it to the buffer
+		BTST.L	#5,D0		; at this point we have sent out the opcode and can decode the rest generically
+		BEQ	1110_imm	; if i/r bit 5 is 0, shift count (immediate)
+		BSR	reg_119		; extract the register from bits 11-9
+		BSR	send_dreg	; send a D register to the buffer
+		BRA	1110_fin	; do the final part of the operation
+1110_imm	BSR	reg_119		; even though its not a register, extract the immediate bits to D0
+		MOVE.W	poundl,D1	; load the length of the pound
+		BSR	print_instr	
+		LEA	#imm_str,A1	; load the target string
+		ADDA.W	#$30,D0		; lets just do the hex conversion here, since the immediate is a single char
+		MOVE.W	D0,(A1)
+		MOVE.W	#1,D1		; The length we want to send is 1
+		BSR	print_instr	; tell print_instr to print that single immediate character
+		BRA	1110_fin	; finish up
+		
+1110_fin	BSR	send_comma 	; comma inbetween operands
+		ANDI.W	#7,D0		; mask off the 3 lsbs, they represent the other operand
+		BSR	send_dreg	; send that operand to the output buffer and we're done
+		RTS
+		
+		
 code1111	STOP	#$2700
 
 **********************************************
@@ -920,6 +978,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
