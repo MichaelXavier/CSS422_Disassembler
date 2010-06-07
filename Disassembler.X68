@@ -767,7 +767,7 @@ sz_76		MOVEM.W	D0,-(SP)	; save registers
 		CMPI.W	#2,D0		; if D0 > 2, invalid
 		BGT	sz_76err	; set the error bit
 		BSR	print_3sz	; print out the size
-		BSR	printi		; print out the immediate operand (first operand)
+		BSR	sendi		; print out the immediate operand (first operand)
 		BSR	send_comma
 		BRA	sz_76exit	; skip over the error part
 sz_76err	MOVE.B	#1,D6		; set the error bit
@@ -845,37 +845,44 @@ print_3szc	MOVEM.W	(SP)+,D1	; continue with subroutine
 		RTS
 		
 **********************************************
-* printi - print an immediate
+* sendi - sendi an immediate to the good buffer
+* Preconditions:
 * D0 - size of the operation (tells it how much to read). This is not modified
+* The number that is read in will be treated and printed as hex, hence why the string
+* gets prepended with #$
+*
+* Postconditions:
+* The immediate, prepended with a #$ 
 * D3 - internal register for to hold the immediate read. Restored
 * D4 - temporarily stores the number of hex digits in the string. Restored
+* A5 - the pointer after the opcode for additional data gets advanced
 *
 * FIXME: is it possible to have a non hex value stored in the immediate?
 **********************************************
-printi		MOVEM.L	D3/A1,-(SP)	; save the internally used registers
+sendi		MOVEM.L	D3/A1,-(SP)	; save the internally used registers
 		MOVEM.W	D4/D1,-(SP)
 		CLR.L	D3		; clear out the whole register so we can treat it as the same size once copied into
 		LEA	pound,A1	; print a pound symbol for the immediate
 		MOVE.W	poundl,D1	; load the length of the pound
 		BSR	print_instr
 		CMPI.W	#0,D0		; if its 0, byte operation
-		BEQ	printiw	
+		BEQ	sendiw	
 		CMPI.W	#1,D0		; if its 1, word operation
-		BEQ	printil	
+		BEQ	sendil	
 		CMPI.W	#2,D0		; if its 2, long operation
-printib		MOVE.B	(A1)+,D3	; advance the instruction pointer 1 byte, read immediate to D3
+sendib		MOVE.B	(A5)+,D3	; advance the instruction pointer 1 byte, read immediate to D3
 		MOVE.B	#2,D4		; 2 hex nibbles long
-		BRA	printic		; continue
-printiw		MOVE.W	(A1)+,D3	; advance the instruction pointer 1 word, read immediate to D3
+		BRA	sendic		; continue
+sendiw		MOVE.W	(A5)+,D3	; advance the instruction pointer 1 word, read immediate to D3
 		MOVE.B	#4,D4		; 4 hex nibbles long
-		BRA	printic		; continue
-printil		MOVE.L	(A1)+,D3	; advance the instruction pointer 1 long, read immediate to D3
+		BRA	sendic		; continue
+sendil		MOVE.L	(A5)+,D3	; advance the instruction pointer 1 long, read immediate to D3
 		MOVE.B	#8,D4		; 8 hex nibbles long
-printic		MOVEA	A0,A3		; h_to_a messes with A0, lets cache it
+sendic		MOVEM.L	A0,-(SP)	; h_to_a messes with A0, lets save it
 		LEA	imm_str,A0	; we will store it in the immediate string
 		BSR	h_to_a		; h_to_a will take D3 and D4 and store it at imm_str (A0)
 		MOVEA	A0,A1		; print_instr wants the address in A1
-		MOVEA	A3,A0		; put the instruction pointer back in A0
+		MOVEM.L	(SP)+,A0	; pop A0 back off the stack
 		MOVE.B	D4,D1		; print_instr wants string length in D1
 		BSR	print_instr
 		MOVEM.W	(SP)+,D4/D1	; restore the internally used register
@@ -1034,16 +1041,16 @@ os_swap		DC.B	'SWAP'
 osl_swap	DC.W	osl_swap-os_swap
 
 sz_b		DC.B	'.B '
-szl_b		szl_b-sz_b
+szl_b		DC.B szl_b-sz_b
 sz_w		DC.B	'.W '
-szl_w		szl_w-sz_w
+szl_w		DC.B szl_w-sz_w
 sz_l		DC.B	'.L '
-szl_l		szl_b-sz_b
+szl_l		DC.B szl_b-sz_b
 
-pound		DC.B	'#'
-poundl		poundl-pound
+pound		DC.B	'#$'
+poundl		DC.B poundl-pound
 comma		DC.B	','
-commal		commal-comma
+commal		DC.B commal-comma
 
 imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
@@ -1092,6 +1099,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
