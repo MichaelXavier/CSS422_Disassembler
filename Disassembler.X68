@@ -273,9 +273,10 @@ data		MOVE.B	#D,(A0)+		*move D to memory and ++
 * decode - Expects A0 to point to the current instruction
 * D2 is the unmodified opcode WORD
 * D0 is used to index into the jump table and it contains bits and pieces of the instruction at different parts
-* TODO: more documentation
+* A5 - pointer to data after the opcode that is advanced/used by EA. not restored
+* D5 - Byte-long indicator of instruction size needed for some immediate modes by EA. restored
 **********************************************
-decode_inst	MOVEM.L	A1-A2/D0-D2,-(SP)
+decode_inst	MOVEM.L	A1-A2/D0-D2/D5,-(SP)
 		LEA	jmp_table,A1	; prepare to index into the jump table
 		LEA	A0,A2		; cache the starting address for counting purposes
 		MOVE.B	#12,D1 		; We will shift LSR right 12 bytes to get the 4 MSBs
@@ -289,7 +290,7 @@ decode_inst	MOVEM.L	A1-A2/D0-D2,-(SP)
 				; TODO continue subroutine here. jump table should save the opcode and advance?
 
 decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read pointer
-		MOVEM.L	(SP)+,A1-A2/D0-D2	; restore all the registers we used
+		MOVEM.L	(SP)+,A1-A2/D0-D2/D5	; restore all the registers we used
 
 		
 jmp_table	JMP	code0000
@@ -330,43 +331,30 @@ code0000	MOVE.W	D2,D0 		; don't need to mask the first 4 because they are alread
 		
 0000_addi	LEA	os_addi,A1	; we got an ADDI, load the string and length
 		MOVE.W	osl_addi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
-		BSR	send_ea		; send the ea into ea land
-		JMP	decodei_ext	; we are done with the decode
+		JMP	0000_cnti
 
 0000_andi	LEA	os_andi,A1	; we got an ANDI, load the string and length
 		MOVE.W	osl_andi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
-		BSR	send_ea		; send the ea into ea land
-		JMP	decodei_ext	; we are done with the decode
+		JMP	0000_cnti
 
 0000_cmpi	LEA	os_cmpi,A1	; we got an CMPI, load the string and length
 		MOVE.W	osl_cmpi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
-		BSR	send_ea		; send the ea into ea land
-		JMP	decodei_ext	; we are done with the decode
+		JMP	0000_cnti
 
 0000_eori	LEA	os_eori,A1	; we got an EORI, load the string and length
 		MOVE.W	osl_eori,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
-		BSR	send_ea		; send the ea into ea land
-		JMP	decodei_ext	; we are done with the decode
+		JMP	0000_cnti
 
 0000_ori	LEA	os_ori,A1	; we got an ORI, load the string and length
 		MOVE.W	osl_ori,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
-		BSR	send_ea		; send the ea into ea land
-		JMP	decodei_ext	; we are done with the decode
+		JMP	0000_cnti
 
 0000_subi	LEA	os_subi,A1	; we got an SUBI, load the string and length
 		MOVE.W	osl_subi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		BSR	print_instr	; print the instruction to the buffer
-		BSR	sz_76		; print out the size from bits 7-6
+		JMP	0000_cnti
+		
+0000_cnti	BSR	print_instr	; print the instruction to the buffer
+		BSR	sz_76		; CONTINUE: print out the size from bits 7-6
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
 
@@ -755,7 +743,8 @@ code1111	STOP	#$2700
 * sz_76
 * It is very common for bits 7-6 to be the size bits, so the logic
 * to print that has been extracted here. D2 is expected to be the original register.
-* D0 (W) is modified and restored to hold the size bit mask.
+* D0 (W) is modified and restored to hold the size bit mask, restored
+* D5 holds the size mask and is left for the EA section to use
 *
 * Since sz_76 is used specifically for immediate instructions, it will copy the immediate
 * operand and then call print_3sz
@@ -765,6 +754,7 @@ sz_76		MOVEM.W	D0,-(SP)	; save registers
 		ANDI.W	#$00C0,D0	; check bits 7-6 for size
 		ASR.W	#6,D0		; roll it right so it is just a number, 0-2
 		CMPI.W	#2,D0		; if D0 > 2, invalid
+		MOVE.W	D0,D5		; copy the size to D5 for EA's use
 		BGT	sz_76err	; set the error bit
 		BSR	print_3sz	; print out the size
 		BSR	sendi		; print out the immediate operand (first operand)
@@ -1099,6 +1089,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
