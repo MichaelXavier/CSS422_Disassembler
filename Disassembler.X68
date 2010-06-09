@@ -369,6 +369,7 @@ code0001c	LEA	os_move,A1	; we got an MOVE.B, load the string and length
 		BSR	print_instr	; print the instruction to the buffer
 		LEA	sz_b,A1		; load size B string address
 		MOVE.W	szl_b,D1	; load the string length
+		MOVE.W	#0,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
 		; TODO: rejoin other MOVES and handle the rest
 		JMP	decodei_ext	; we are done with the decode
@@ -378,6 +379,7 @@ code0010	BSR	extr_opmode	; pull out 8-6 bits into D0
 		BNE	0010_movel
 		LEA	jb_movea,A4	; save the jumpback to A4
 		LEA	os_movea,A1	; we got an MOVEA.L, load the string and length
+		MOVE.W	#2,D5		; Save the size for EA
 		MOVE.W	osl_movea,D1	
 		BSR	print_instr	; print the instruction to the buffer
 		BRA	0010_cnt	; continue
@@ -385,10 +387,12 @@ code0010	BSR	extr_opmode	; pull out 8-6 bits into D0
 0100_movel	LEA	os_move,A1	; we got an MOVE.L, load the string and length
 		MOVE.W	osl_move,D1	
 		BSR	print_instr	; print the instruction to the buffer
+		MOVE.W	#2,D5		; Save the size for EA
 		LEA	jb_move,A4	; set the jumpback to A4		
 
 0010_cnt	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
+		MOVE.W	#2,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
 		BSR	reg_119		; extract the register
 		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle the regs independently
@@ -399,6 +403,7 @@ code0011	BSR	extr_opmode	; pull out 8-6 bits into D0
 		BNE	0011_movew
 		LEA	jb_movea,A4	; save the jumpback to A4
 		LEA	os_movea,A1	; we got an MOVEA.W, load the string and length
+		MOVE.W	#1,D5		; Save the size for EA
 		MOVE.W	osl_movea,D1	
 		BSR	print_instr	; print the instruction to the buffer
 		BRA	0011_cnt	; continue
@@ -406,11 +411,13 @@ code0011	BSR	extr_opmode	; pull out 8-6 bits into D0
 
 0011_movew	LEA	os_move,A1	; we got an MOVE.W, load the string and length
 		MOVE.W	osl_move,D1	
+		MOVE.W	#1,D5		; Save the size for EA
 		BSR	print_instr	; print the instruction to the buffer
 		LEA	jb_move,A4	; set the jumpback to A4		
 
 0011_cnt	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
+		MOVE.W	#2,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
 		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle their cases independently
 		
@@ -480,10 +487,12 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 
 0100_movemw	LEA	sz_w,A1		; load size W string address
 		MOVE.W	szl_w,D1	; load the string length
+		MOVE.W	#1,D5		; Save the size for EA
 		BRA	0100_movemc	; continue		
 
 0100_moveml	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
+		MOVE.W	#1,D5		; Save the size for EA
 
 0100_movemc	BSR 	print_instr	; print out the size
 		BTST.L	#10,D0		; direction. if 0, reg to mem, else mem to reg
@@ -786,7 +795,8 @@ send_86op	MOVEM.W	D0/D3,-(SP)	; save registers
 		CMPI.B	#4,D0		; D0 <= 4, no offset needed
 		BLS	s86_cont	; modes 0 or 4, 1 or 5, 2 or 6 are B, W and L  respectively
 		SUBI.B	#4,D0		; offset D0 by 4 to get the proper register number
-s86_cont	BSR	print3sz	; continue with operations, print the size
+s86_cont	MOVE.W	D0,D5		; Save the size for EA
+		BSR	print3sz	; continue with operations, print the size
 		; use d3 as the register size 
 		MOVE.W	D3,D0		; load the opmode again
 		CMPI.B	#4,D0		; D0 <= 4 EA comes first
