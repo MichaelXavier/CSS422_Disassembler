@@ -206,11 +206,11 @@ exit		RTS				*return to subroutine
 * Subroutine:		print_instr
 * Description:		subroutine that takes a string and copies it to a
 *			buffer/memory then adds a comma,CR,LF
+*********NICOLE: please fix up these registers per mike's request
 * Preconditions:	A0 points to string
 *			A1 points to buffer
 *			D1 holds length of string in words
-* Postconditions:	string will be added to memory/buffer and then a comma and
-*			CR,LR are added
+* Postconditions:	string will be added to memory/buffer
 *			A0 is not modified
 *			internally will use register D0 and A2
 *			A0,A2,D0,and D1 will be pushed to stack
@@ -222,11 +222,7 @@ prtInL		CMPI.B	#00,D1			*compare 0 to counter
 		MOVE.W	D0,(A1)+		*move next word from register to buffer
 		SUBI.B	#01,D1			*update counter
 		BRA	prtInL			*back to loop
-done		MOVE.B	#comma,(A1)+		*put in comma
-		MOVE.B	#CR,(A1)+		*put in CR
-		MOVE.B	#comma,(A1)+		*put in comma
-		MOVE.B	#LF,(A1)+		*put in LR	
-		MOVEM.L	(SP)+,A0/A2/D0/D1	*restore stack	
+done	MOVEM.L	(SP)+,A0/A2/D0/D1	*restore stack	
 		RTS				*return from subroutine
 		
 *******************************************************************************
@@ -338,8 +334,9 @@ data		MOVEM.L	A1/A3/D3/D4,-(SP)	;save to stack
 * A5 - pointer to data after the opcode that is advanced/used by EA. not restored
 * D5 - Byte-long indicator of instruction size needed for some immediate modes by EA. restored
 **********************************************
-decode_inst	MOVEM.L	A1-A2/D0-D2/D5,-(SP)
+decode_inst	MOVEM.L	A1-A2/D0-D2/D4/D5,-(SP)
 		LEA	jmp_table,A1	; prepare to index into the jump table
+		MOVE.L	A0,D4		; cache starting address for PC in ea land
 		MOVEA.L	A0,A2		; cache the starting address for counting purposes
 		MOVE.B	#12,D1 		; We will shift LSR right 12 bytes to get the 4 MSBs
 		MOVE.W	(A0)+,D2	; advance A0 by a word, read the full opcode into D2
@@ -349,10 +346,9 @@ decode_inst	MOVEM.L	A1-A2/D0-D2/D5,-(SP)
 		MULU	#6,D0		; Prepare D0 as an index into the jump table
 		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
-				; TODO continue subroutine here. jump table should save the opcode and advance?
-
 decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read pointer
-		MOVEM.L	(SP)+,A1-A2/D0-D2/D5	; restore all the registers we used
+			; TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!: send CL/RF
+		MOVEM.L	(SP)+,A1-A2/D0-D2/D4/D5	; restore all the registers we used
 
 		
 jmp_table	JMP	code0000
@@ -1027,6 +1023,11 @@ extr_opmode	MOVE.W	D2,D0		; return value will be in D0. Used internally so thats
 		ANDI.W	#$1C0,D0	; we only want bits 8-6
 		ASR.W	#6,D0		; roll it right 6 times to treat it as a number
 		RTS
+		
+**********************************************
+* REMOVE AFTER EA CODE MERGE
+**********************************************
+decode_ea	RTS		;stubbed
 
 * Variables and Strings
 **********************************************
@@ -1164,6 +1165,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
