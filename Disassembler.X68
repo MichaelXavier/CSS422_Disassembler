@@ -133,7 +133,7 @@ stp		STOP		#$2700		*back to simulator
 	
 a_to_h		MOVEM.L		D2,-(SP)	*put utility register on stack
 a_to_hSt	CMPI.B		#00,D1		*if D1 is 0 done
-		BEQ		exit		*if done exit
+		BEQ		ah_exit		*if done exit
 		SUBI.B		#01,D1		*update counter
 		ROL.L		#4,D7		*prepare register to take next hex
 		MOVE.B		(A1)+,D2	*D2 holds next byte to convert
@@ -160,8 +160,8 @@ ah_uc		SUBI.B		#$37,D2		*convert to Hex letter
 		OR.B		D2,D7		*add hex digit to D7
 		BRA		a_to_hSt	*back to loop
 badEx		MOVE.B		#01,D6		*set bad flag
-		BRA		exit		*then exit
-exit		MOVEM.L		(SP)+,D2	*pop register off stack
+		BRA		ah_exit		*then exit
+ah_exit		MOVEM.L		(SP)+,D2	*pop register off stack
 		RTS				*return from subroutine	
 
 *******************************************************************************
@@ -340,7 +340,7 @@ data		MOVEM.L	A1/A3/D3/D4,-(SP)	;save to stack
 **********************************************
 decode_inst	MOVEM.L	A1-A2/D0-D2/D5,-(SP)
 		LEA	jmp_table,A1	; prepare to index into the jump table
-		LEA	A0,A2		; cache the starting address for counting purposes
+		MOVEA.L	A0,A2		; cache the starting address for counting purposes
 		MOVE.B	#12,D1 		; We will shift LSR right 12 bytes to get the 4 MSBs
 		MOVE.W	(A0)+,D2	; advance A0 by a word, read the full opcode into D2
 		MOVEA.L	A0,A5		; after-opcode pointer for EA is set up
@@ -377,45 +377,45 @@ code0000	MOVE.W	D2,D0 		; don't need to mask the first 4 because they are alread
 		ANDI.W	#$0F00,D0	; get the next 4 to see which instruction it is
 		ASR.W	#8,D0		; roll it right 4 so we can treat it like a number
 		CMPI.W	#6,D0		; 6 is an ADDI
-		BEQ	0000_addi	; we've gotten an ADDI
+		BEQ	addi_0000	; we've gotten an ADDI
 		CMPI.W	#2,D0		; 2 is an ANDI
-		BEQ	0000_andi	; we've gotten an ANDI
+		BEQ	andi_0000	; we've gotten an ANDI
 		CMPI.W	#12,D0		; 12 is an CMPI
-		BEQ	0000_cmpi	; we've gotten an CMPI
+		BEQ	cmpi_0000	; we've gotten an CMPI
 		CMPI.W	#10,D0		; 10 is an EORI
-		BEQ	0000_eori	; we've gotten an EORI
+		BEQ	eori_0000	; we've gotten an EORI
 		CMPI.W	#0,D0		; 0 is an ORI
-		BEQ	0000_ori	; we've gotten an ORI
+		BEQ	ori_0000	; we've gotten an ORI
 		CMPI.W	#4,D0		; 4 is a SUBI
-		BEQ	0000_subi	; we've gotten an SUBI
+		BEQ	subi_0000	; we've gotten an SUBI
 		MOVE.B	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
 		
-0000_addi	LEA	os_addi,A1	; we got an ADDI, load the string and length
+addi_0000	LEA	os_addi,A1	; we got an ADDI, load the string and length
 		MOVE.W	osl_addi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 
-0000_andi	LEA	os_andi,A1	; we got an ANDI, load the string and length
+andi_0000	LEA	os_andi,A1	; we got an ANDI, load the string and length
 		MOVE.W	osl_andi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 
-0000_cmpi	LEA	os_cmpi,A1	; we got an CMPI, load the string and length
+cmpi_0000	LEA	os_cmpi,A1	; we got an CMPI, load the string and length
 		MOVE.W	osl_cmpi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 
-0000_eori	LEA	os_eori,A1	; we got an EORI, load the string and length
+eori_0000	LEA	os_eori,A1	; we got an EORI, load the string and length
 		MOVE.W	osl_eori,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 
-0000_ori	LEA	os_ori,A1	; we got an ORI, load the string and length
+ori_0000	LEA	os_ori,A1	; we got an ORI, load the string and length
 		MOVE.W	osl_ori,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 
-0000_subi	LEA	os_subi,A1	; we got an SUBI, load the string and length
+subi_0000	LEA	os_subi,A1	; we got an SUBI, load the string and length
 		MOVE.W	osl_subi,D1	; FIXME: assuming that I/O's function wants them in these regs
-		JMP	0000_cnti
+		JMP	cnti_0000
 		
-0000_cnti	BSR	print_instr	; print the instruction to the buffer
+cnti_0000	BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; CONTINUE: print out the size from bits 7-6
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
@@ -438,50 +438,50 @@ code0001c	LEA	os_move,A1	; we got an MOVE.B, load the string and length
 
 code0010	BSR	extr_opmode	; pull out 8-6 bits into D0
 		CMPI.W	#$80,D0		; 001 is a MOVEA
-		BNE	0010_movel
+		BNE	movel_0010
 		LEA	jb_movea,A4	; save the jumpback to A4
 		LEA	os_movea,A1	; we got an MOVEA.L, load the string and length
 		MOVE.W	#2,D5		; Save the size for EA
 		MOVE.W	osl_movea,D1	
 		BSR	print_instr	; print the instruction to the buffer
-		BRA	0010_cnt	; continue
+		BRA	cnt_0010	; continue
 		
-0100_movel	LEA	os_move,A1	; we got an MOVE.L, load the string and length
+movel_0010	LEA	os_move,A1	; we got an MOVE.L, load the string and length
 		MOVE.W	osl_move,D1	
 		BSR	print_instr	; print the instruction to the buffer
 		MOVE.W	#2,D5		; Save the size for EA
 		LEA	jb_move,A4	; set the jumpback to A4		
 
-0010_cnt	LEA	sz_l,A1		; load size L string address
+cnt_0010	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
 		MOVE.W	#2,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
 		BSR	reg_119		; extract the register
-		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle the regs independently
+		JMP	(A4)		; go to the jumpback so MOVE/MOVEA can handle the regs independently
 		
 
 code0011	BSR	extr_opmode	; pull out 8-6 bits into D0
 		CMPI.W	#$80,D0		; 001 is a MOVEA
-		BNE	0011_movew
+		BNE	movew_0011
 		LEA	jb_movea,A4	; save the jumpback to A4
 		LEA	os_movea,A1	; we got an MOVEA.W, load the string and length
 		MOVE.W	#1,D5		; Save the size for EA
 		MOVE.W	osl_movea,D1	
 		BSR	print_instr	; print the instruction to the buffer
-		BRA	0011_cnt	; continue
+		BRA	cnt_0011	; continue
 
 
-0011_movew	LEA	os_move,A1	; we got an MOVE.W, load the string and length
+movew_0011	LEA	os_move,A1	; we got an MOVE.W, load the string and length
 		MOVE.W	osl_move,D1	
 		MOVE.W	#1,D5		; Save the size for EA
 		BSR	print_instr	; print the instruction to the buffer
 		LEA	jb_move,A4	; set the jumpback to A4		
 
-0011_cnt	LEA	sz_l,A1		; load size L string address
+cnt_0011	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
 		MOVE.W	#2,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
-		JMP	A4		; go to the jumpback so MOVE/MOVEA can handle their cases independently
+		JMP	(A4)		; go to the jumpback so MOVE/MOVEA can handle their cases independently
 		
 jb_move		; FIXME: apparently the dest EA not only comes first but transposes the halves. this is handled below but I don't know if swapping the halves alone will solve it
 		BSR	send_ea		; ea at the lsb end is the *source* according to the manual
@@ -506,112 +506,112 @@ jb_movea	BSR	send_ea		; EA at the end is the source, do it first
 
 code0100	BSR	mask_f4		; cache full instruction word into D0
 		CMPI.W	#$E71,D0	; 111001110001 remainder is nop
-		BEQ	0100_nop
+		BEQ	nop_0100
 		CMPI.W	#$E75,D0
-		BEQ	0100_rts
+		BEQ	rts_0100
 		MOVE.W	D2,D0		; restore D0 as a copy of d2
 		ANDI.W	#$0F00,D0	; mask the second most significant nibble
 		CMPI.W	#$0400,D0	; if the next 4 bits are 0100, NEG
-		BEQ	0100_neg	; we've found a NEG
+		BEQ	neg_0100	; we've found a NEG
 		CMPI.W	#$0600,D0	; if the next 4 bits are 0110, NOT
-		BEQ	0100_not	; we've found a NOT
+		BEQ	not_0100	; we've found a NOT
 		CMPI.W	#$0002,D0	; if the next 4 bits are 0010, CLR
-		BEQ	0100_clr	; we've found a CLR
+		BEQ	clr_0100	; we've found a CLR
 		MOVE.W	D2,D0		; restore the D2 register
 		ANDI.W	#$0FC0,D0	; take 6 bits after the first nibble
 		ASR.W	#6,D0		; roll it right 4 bits so it can be treated as a number
 		CMPI.W	#$3B,D0		; 111011 is JMP
-		BEQ	0100_jmp	; we've found a JMP
+		BEQ	jmp_0100	; we've found a JMP
 		CMPI.W	#$3A,D0		; 111010 is JSR
-		BEQ	0100_jsr	; we've found a JSR
+		BEQ	jsr_0100	; we've found a JSR
 		MOVE.W	D2,D0		; restore the D2 register
 		ANDI.W	#$0FF8,D0	; take 9 bits after the first nibble
 		CMPI.W	#$2100,D0	; 100001000 is SWAP
-		BEQ	0100_swap	; we've found a SWAP
+		BEQ	swap_0100	; we've found a SWAP
 		BSR	extr_opmode	; we happen to need bits 8-6
 		MOVE.W	D2,D0		; reload the instruction
 		ANDI.W	#$1C0,D0	; mask off bits 8-6
-		CMPI.W, #$1C0,D0	; 111 is LEA
-		BEQ	0100_lea
+		CMPI.W 	#$1C0,D0	; 111 is LEA
+		BEQ	lea_0100
 		MOVE.W	D2,D0		; reload the instruction
 		BTST.L	#11,D0		; if bit 11 isn't set, it can't be a movem so we don't support it
-		BNE	0100_err	; error!
+		BNE	err_0100	; error!
 		ANDI.W	#$380,D0	; check if bits 9-7 are 001
 		CMPI.W	#$80,D0
-		BNE	0100_err
+		BNE	err_0100
 
-0100_movem	LEA	os_movem,A1	; we got a MOVEM, load the string and length
+movem_0100	LEA	os_movem,A1	; we got a MOVEM, load the string and length
 		MOVE.W	osl_movem,D1
 		BSR	print_instr	; print the instruction to the buffer
 		MOVE.W	D2,D0		; reload the instruction
 		BTST.L	#6,D0		; size field, 0 for word, 1 for long
-		BEQ	0100_moveml	; long
+		BEQ	moveml_0100	; long
 
-0100_movemw	LEA	sz_w,A1		; load size W string address
+movemw_0100	LEA	sz_w,A1		; load size W string address
 		MOVE.W	szl_w,D1	; load the string length
 		MOVE.W	#1,D5		; Save the size for EA
-		BRA	0100_movemc	; continue		
+		BRA	movemc_0100	; continue		
 
-0100_moveml	LEA	sz_l,A1		; load size L string address
+moveml_0100	LEA	sz_l,A1		; load size L string address
 		MOVE.W	szl_l,D1	; load the string length
 		MOVE.W	#1,D5		; Save the size for EA
 
-0100_movemc	BSR 	print_instr	; print out the size
+movemc_0100	BSR 	print_instr	; print out the size
 		BTST.L	#10,D0		; direction. if 0, reg to mem, else mem to reg
-		BEQ	0100_movemr
-0100_movemm	;TODO mem to reg, this is going to SUCK for EA
-0100_movemr	;TODO reg to mem, this will too
+		BEQ	movemr_0100
+movemm_0100	;TODO mem to reg, this is going to SUCK for EA
+movemr_0100	;TODO reg to mem, this will too
 		JMP	decodei_ext	; we are done with the decode
 
-0100_err	MOVE.W 	#1,D6		; error!
+err_0100	MOVE.W 	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
 		
 		;TODO: MOVEM or throw an error
 		
-0100_nop	LEA	os_nop,A1	; we got a NOP, load the string and length
+nop_0100	LEA	os_nop,A1	; we got a NOP, load the string and length
 		MOVE.W	osl_nop,D1
 		BSR	print_instr	; print the instruction to the buffer
 		JMP	decodei_ext	; we are done with the decode
 
-0100_rts	LEA	os_rts,A1	; we got an RTS, load the string and length
+rts_0100	LEA	os_rts,A1	; we got an RTS, load the string and length
 		MOVE.W	osl_rts,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		JMP	decodei_ext	; we are done with the decode
 		
-0100_neg	LEA	os_neg,A1	; we got a NEG, load the string and length
+neg_0100	LEA	os_neg,A1	; we got a NEG, load the string and length
 		MOVE.W	osl_neg,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
 
-0100_not	LEA	os_not,A1	; we got a NOT, load the string and length
+not_0100	LEA	os_not,A1	; we got a NOT, load the string and length
 		MOVE.W	osl_not,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
 		
-0100_clr	LEA	os_clr,A1	; we got a CLR, load the string and length
+clr_0100	LEA	os_clr,A1	; we got a CLR, load the string and length
 		MOVE.W	osl_clr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	sz_76		; print out the size from bits 7-6
 		BSR	send_ea
 		JMP	decodei_ext	; we are done with the decode
 
-0100_jmp	LEA	os_jmp,A1	; we got a JMP, load the string and length
+jmp_0100	LEA	os_jmp,A1	; we got a JMP, load the string and length
 		MOVE.W	osl_jmp,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
 
-0100_jsr	LEA	os_jsr,A1	; we got a JSR, load the string and length
+jsr_0100	LEA	os_jsr,A1	; we got a JSR, load the string and length
 		MOVE.W	osl_jsr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_ea		; send the ea into ea land
 		JMP	decodei_ext	; we are done with the decode
 
-0100_swap	LEA	os_swap,A1	; we got a SWAP, load the string and length
+swap_0100	LEA	os_swap,A1	; we got a SWAP, load the string and length
 		MOVE.W	osl_swap,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		MOVE.W	D2,D0		; reload the instruction
@@ -619,7 +619,7 @@ code0100	BSR	mask_f4		; cache full instruction word into D0
 		BSR	send_dreg	; send out the dreg and we're done
 		JMP	decodei_ext	; we are done with the decode
 
-0100_lea	LEA	os_lea,A1	; we got a LEA, load the string and length
+lea_0100	LEA	os_lea,A1	; we got a LEA, load the string and length
 		MOVE.W	osl_lea,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_ea		; send the EA stuff off to ea land for printing
@@ -632,25 +632,25 @@ code0101	STOP	#$2700
 
 code0110	BSR	mask_f4		; cache full instruction word into D0
 		CMPI.W	#$100,D0	; if the next 4 are 0001, its a BSR
-		BEQ	0110_bsr
+		BEQ	bsr_0110
 		MOVE.B	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
 	
-0110_bsr	LEA	os_bsr,A1	; we got a BSR, load the string and length
+bsr_0110	LEA	os_bsr,A1	; we got a BSR, load the string and length
 		MOVE.W	osl_bsr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
 		; TODO: continue on with BSR stuff
 		JMP	decodei_ext	; we are done with the decode
 		
-code0111	STOP	#$2700
-code100		BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
+code0111	STOP	#$2700		;FIXME: handle better
+code1000	BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
 		ANDI	#3,D0		; check last 2 bits
 		CMPI.B	#3,D0		; if they are set, bad instruction
-		BNE	1000_or		; if not, we've got an OR
+		BNE	or_1000		; if not, we've got an OR
 		MOVE.B	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
 		
-1000_or		LEA	os_or,A1	; we got a OR, load the string and length
+or_1000		LEA	os_or,A1	; we got a OR, load the string and length
 		MOVE.W	osl_or,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
@@ -659,15 +659,15 @@ code100		BSR	extr_opmode	; valid OR opmodes are anything but 011 or 111
 code1001	BSR 	extr_opmode	; opmode will differentiate between SUB and SUBA
 		ANDI	#3,D0		; check last 2 bits
 		CMPI.B	#3,D0		; if the last 2 bits are 11, SUBA
-		BEQ	1001_suba	; otherwise, fall through sub
+		BEQ	suba_1001	; otherwise, fall through sub
 		
-1001_sub	LEA	os_sub,A1	; we got a SUB, load the string and length
+sub_1001	LEA	os_sub,A1	; we got a SUB, load the string and length
 		MOVE.W	osl_sub,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-1001_suba	LEA	os_suba,A1	; we got a SUBA, load the string and length
+suba_1001	LEA	os_suba,A1	; we got a SUBA, load the string and length
 		MOVE.W	osl_suba,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
@@ -676,46 +676,46 @@ code1001	BSR 	extr_opmode	; opmode will differentiate between SUB and SUBA
 code1010	STOP	#$2700
 code1011	BSR	extr_opmode	; opmode differentiates between CMP,CMPA,EOR
 		CMPI.B	#2,D0		; 000-010 is CMP
-		BLS	1011_cmp
+		BLS	cmp_1011
 		CMPI.B	#3,D0		; 011 and 111 are cmpa
-		BEQ	1011_cmpa
+		BEQ	cmpa_1011
 		CMPI.B	#7,D0
-		BEQ	1011_cmpa 	; otherwise fall through to eor
+		BEQ	cmpa_1011	; otherwise fall through to eor
 
-1011_eor	LEA	os_eor,A1	; we got a EOR, load the string and length
+eor_1011	LEA	os_eor,A1	; we got a EOR, load the string and length
 		MOVE.W	osl_eor,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-1011_cmpa	LEA	os_cmpa,A1	; we got a CMPA, load the string and length
+cmpa_1011	LEA	os_cmpa,A1	; we got a CMPA, load the string and length
 		MOVE.W	osl_cmpa,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-1011_cmp	LEA	os_cmp,A1	; we got a CMP, load the string and length
+cmp_1011	LEA	os_cmp,A1	; we got a CMP, load the string and length
 		MOVE.W	osl_cmp,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-code_1100	MOVE.W	D2,D0		; reload the instruction
+code1100	MOVE.W	D2,D0		; reload the instruction
 		ANDI.W	#$1F8,D0	; take off bits 8-3
 		CMPI	#$140,D0	; the pattern 101000 there is EXG
-		BEQ	1100_exg
+		BEQ	exg_1100
 		CMPI	#$148,D0	; the pattern 101001 there is EXG
-		BEQ	1100_exg
+		BEQ	exg_1100
 		CMPI	#$188,D0	; the pattern 110001 there is EXG
-		BEQ	1100_exg	; otherwise, fall through to AND
+		BEQ	exg_1100	; otherwise, fall through to AND
 
-1100_and	LEA	os_and,A1	; we got an AND, load the string and length
+and_1100	LEA	os_and,A1	; we got an AND, load the string and length
 		MOVE.W	osl_and,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-1100_exg	LEA	os_exg,A1	; we got a EXT, load the string and length
+exg_1100	LEA	os_exg,A1	; we got a EXT, load the string and length
 		MOVE.W	osl_exg,D1
 		BSR	print_instr	; print the instruction to the buffer
 		; TODO more EXG stuff
@@ -723,17 +723,17 @@ code_1100	MOVE.W	D2,D0		; reload the instruction
 		
 code1101	BSR	extr_opmode	; opmode differentiates between ADD and ADDA
 		CMPI.B	#3,D0		; 011 and 111 are ADDA
-		BEQ	1011_adda
+		BEQ	adda_1101
 		CMPI.B	#7,D0
-		BEQ	1011_adda 	; otherwise fall through to ADDA
+		BEQ	adda_1101	; otherwise fall through to ADDA
 
-1101_add	LEA	os_add,A1	; we got a ADD, load the string and length
+add_1101	LEA	os_add,A1	; we got a ADD, load the string and length
 		MOVE.W	osl_add,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
 		
-1101_adda	LEA	os_add,A1	; we got a ADDA, load the string and length
+adda_1101	LEA	os_add,A1	; we got a ADDA, load the string and length
 		MOVE.W	osl_add,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
@@ -743,67 +743,67 @@ code1110	MOVE.W	D2,D0		; reload the instruction
 		ANDI.W	#$18,D0		; extract bits 4 and 3 to determine the opcode
 		LSR.W	#3,D0		; roll it right 3 so it can be treated as a number
 		CMPI.W	#9,D0		; if its 00, ASL/ASR
-		BEQ	1110_as
+		BEQ	as_1110
 		CMPI.W	#1,D0		; if its 01, LSL/LSR
-		BEQ	1110_ls
+		BEQ	ls_1110
 		CMPI.W	#3,D0		; if its 11, ROL/ROR
-		BEQ	1110_ls
+		BEQ	ls_1110
 		MOVE.B	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
 		
-1110_as		MOVE.W	D2,D0
+as_1110		MOVE.W	D2,D0
 		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
-		BEQ	1110_asl
+		BEQ	asl_1110
 		
-1110_asr	LEA	os_asr		; we got an ASR, load the string and length
+asr_1110	LEA	os_asr,A1	; we got an ASR, load the string and length
 		MOVE.W	osl_asr,D1
-		BRA	1110_cnt	; continue
+		BRA	cnt_1110	; continue
 		
-1110_asl	LEA	os_asl,A1	; we got an ASL, load the string and length
+asl_1110	LEA	os_asl,A1	; we got an ASL, load the string and length
 		MOVE.W	osl_asl,D1
-		BRA	1110_cnt	; continue
+		BRA	cnt_1110	; continue
 		
-1110_ls		MOVE.W	D2,D0
+ls_1110		MOVE.W	D2,D0
 		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
-		BEQ	1110_lsl
+		BEQ	lsl_1110
 		
-1110_lsr	LEA	os_lsr		; we got an LSR, load the string and length
+lsr_1110	LEA	os_lsr,A1	; we got an LSR, load the string and length
 		MOVE.W	osl_lsr,D1
-		BRA	1110_cnt	; continue
+		BRA	cnt_1110	; continue
 		
-1110_lsl	LEA	os_lsl,A1	; we got an LSL, load the string and length
+lsl_1110	LEA	os_lsl,A1	; we got an LSL, load the string and length
 		MOVE.W	osl_lsl,D1
-		BRA	1110_cnt	; continue
+		BRA	cnt_1110	; continue
 
-1110_ro		MOVE.W	D2,D0
+ro_1110		MOVE.W	D2,D0
 		BTST.L	#8,D0		; If bit 8 is set, it is left, otherwise right
-		BEQ	1110_rol
+		BEQ	rol_1110
 		
-1110_ror	LEA	os_ror		; we got an ROR, load the string and length
+ror_1110	LEA	os_ror,A1	; we got an ROR, load the string and length
 		MOVE.W	osl_ror,D1
-		BRA	1110_cnt	; continue
+		BRA	cnt_1110	; continue
 		
-1110_rol	LEA	os_rol,A1	; we got an ROL, load the string and length
+rol_1110	LEA	os_rol,A1	; we got an ROL, load the string and length
 		MOVE.W	osl_rol,D1
 
-1110_cnt	BSR	sz_76		; handle the size and add it to the buffer
+cnt_1110	BSR	sz_76		; handle the size and add it to the buffer
 		BTST.L	#5,D0		; at this point we have sent out the opcode and can decode the rest generically
-		BEQ	1110_imm	; if i/r bit 5 is 0, shift count (immediate)
+		BEQ	imm_1110	; if i/r bit 5 is 0, shift count (immediate)
 		BSR	reg_119		; extract the register from bits 11-9
 		BSR	send_dreg	; send a D register to the buffer
-		BRA	1110_fin	; do the final part of the operation
+		BRA	fin_1110	; do the final part of the operation
 		
-1110_imm	BSR	reg_119		; even though its not a register, extract the immediate bits to D0
+imm_1110	BSR	reg_119		; even though its not a register, extract the immediate bits to D0
 		MOVE.W	poundl,D1	; load the length of the pound
 		BSR	print_instr	
-		LEA	#imm_str,A1	; load the target string
-		ADDA.W	#$30,D0		; lets just do the hex conversion here, since the immediate is a single char
+		LEA	imm_str,A1	; load the target string
+		ADDI.W	#$30,D0		; lets just do the hex conversion here, since the immediate is a single char
 		MOVE.W	D0,(A1)
 		MOVE.W	#1,D1		; The length we want to send is 1
 		BSR	print_instr	; tell print_instr to print that single immediate character
-		BRA	1110_fin	; finish up
+		BRA	fin_1110	; finish up
 		
-1110_fin	BSR	send_comma 	; comma inbetween operands
+fin_1110	BSR	send_comma 	; comma inbetween operands
 		ANDI.W	#7,D0		; mask off the 3 lsbs, they represent the other operand
 		BSR	send_dreg	; send that operand to the output buffer and we're done
 		JMP	decodei_ext	; we are done with the decode
@@ -839,9 +839,12 @@ sz_76exit	MOVEM.W	(SP)+,D0	; restore registers
 * reg_119 - extract register bits from bits 11-9 and
 * saves them to D0. Assumes the original is in D2
 **********************************************
-reg_119		MOVE.W	D2,D0		; reload the buffer
+reg_119		MOVEM.W	D3,-(SP)	; save register
+		MOVE.W	D2,D0		; reload the buffer
 		ANDI.W	#$E00,D0	; bits 11-9 are the register number
-		ASR.W	#9,D0		; roll it right so it can be treated as a number
+		MOVE.W	#9,D3		; we want to roll it over right 9 places
+		ASR.W	D3,D0		; roll it right so it can be treated as a number
+		MOVEM.W	(SP)+,D3	; restore register
 		RTS			; done
 		
 **********************************************
@@ -858,7 +861,7 @@ send_86op	MOVEM.W	D0/D3,-(SP)	; save registers
 		BLS	s86_cont	; modes 0 or 4, 1 or 5, 2 or 6 are B, W and L  respectively
 		SUBI.B	#4,D0		; offset D0 by 4 to get the proper register number
 s86_cont	MOVE.W	D0,D5		; Save the size for EA
-		BSR	print3sz	; continue with operations, print the size
+		BSR	print_3sz	; continue with operations, print the size
 		; use d3 as the register size 
 		MOVE.W	D3,D0		; load the opmode again
 		CMPI.B	#4,D0		; D0 <= 4 EA comes first
@@ -991,9 +994,9 @@ send_dreg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
 * note that this does NOT clean up after itself because it is meant to be called within the context of one
 * of the send_*reg methods
 *********************************************
-g_send_reg	ANDI.W	$00FF,D0	; mask away the 8 MSBs of the word. We have to use a word size but there could be extra data in there
-		MULU.B	#2,D0		; multiply offset by the length of each reg string
-		MOVE.W, #2,D1 		; d1 holds the length, which is always 2 for a register
+g_send_reg	ANDI.W	#$00FF,D0	; mask away the 8 MSBs of the word. We have to use a word size but there could be extra data in there
+		MULU.W	#2,D0		; multiply offset by the length of each reg string
+		MOVE.W 	#2,D1 		; d1 holds the length, which is always 2 for a register
 		LEA	(A1,D0.W),A1	; index in by the offset
 		BSR	print_instr	; defer to print_instr to load it into the buffer
 		RTS			; done
@@ -1001,8 +1004,8 @@ g_send_reg	ANDI.W	$00FF,D0	; mask away the 8 MSBs of the word. We have to use a 
 **********************************************
 * send a comma off to the buffer
 **********************************************
-send_comma	LEA	comma,A1	; print a comma after the first operand
-		MOVE.W	commal,D1	; load the length of the comma
+send_comma	LEA	commas,A1	; print a comma after the first operand
+		MOVE.W	commasl,D1	; load the length of the comma
 		BSR	print_instr
 		RTS
 
@@ -1111,8 +1114,8 @@ szl_l		DC.B szl_b-sz_b
 
 pound		DC.B	'#$'
 poundl		DC.B poundl-pound
-comma		DC.B	','
-commal		DC.B commal-comma
+commas		DC.B	','
+commasl		DC.B commasl-commas
 
 imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
@@ -1161,6 +1164,8 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
+
 
 
 
