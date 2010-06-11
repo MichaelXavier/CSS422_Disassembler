@@ -27,15 +27,40 @@ D		EQU		$44		*to hold ASCII for D
 A		EQU		$41		*to hold ASCII for A
 T		EQU		$54		*to hold ASCII for T
 comma		EQU		$2C		*for ASCII for comma
+upY		EQU		$59		*for ASCII Y
+lwY		EQU		$79		*for ASCII y
+upQ		EQU		$51		*for ASCII Q
+lwQ		EQU		$71		*for ASCII q
+
 
 		ORG		start		*start of program
 		LEA		stack,SP	*stack pointer in A7/SP
 	
-		MOVE.B		#task0,D0	*D0 hols task0, print w CR
+MNMIntro	MOVE.B		#task0,D0	*D0 hols task0, print w CR
 		LEA		intro,A1	*A1 holds intro string
 		MOVE.W		introL,D1	*D1 holds length of intro string
 		TRAP		#15		*do it
 		
+		MOVE.B		#task2,D0	*D0 holds task2, take input
+		LEA		dataSt,A1	*string to hold input
+		TRAP		#15		*string ptr in A1,length in D1
+		MOVE.B		(A1),D2		*so D2 holds first byte of input
+		CMPI.B		#upY,D2		*is D2 a Y
+		BEQ		stSec		*then start disassembling
+		CMPI.B		#lwY,D2		*is D2 a y
+		BEQ		stSec		*then start disassembling
+		CMPI.B		#upQ,D2		*is D2 a Q
+		BEQ		stp		*then done, stop
+		CMPI.B		#lwQ,D2		*is D2 a q
+		BEQ		stp		*then done, stop
+		BRA		bIntro		*invalid input	
+		
+bIntro		MOVE.B		#task0,D0	*D0 holds task2, print w CR
+		LEA		iErr,A1		*A1 holds error string
+		MOVE.W		iErrL,D1	*D1 holds length of start error string
+		TRAP		#15		*do it
+		BRA		MNMIntro	*back to start sequence for reprompt
+				
 stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		LEA		stAdd,A1	*A1 holds string asking for start
 		MOVE.W		stAddL,D1	*D1 holds length of start string
@@ -52,6 +77,11 @@ stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		BSR		a_to_h		*convert to hex
 		CMPI.B		#01,D6		*check if D6 holds a 1/bad flag
 		BEQ		badSt		*is bad go to badSt
+		CLR.L		D2		*clear register
+		MOVE.B		#addSz,D2	*put 8 in D2
+		SUB.B		D1,D2		*subtract length of string from 8
+		MULU.W		#4,D2		*multiply by 4
+		ROL.L		D2,D7		*move hex over appropriate digits
 		BSR		evenCk		*need to check if address is even 
 		CMPI.L		#strtAd,D7	*compare start and D7
 		BLT		badSt		*if smaller then is a bad address
@@ -76,13 +106,18 @@ endSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		LEA		data2,A1	*to hold input string
 		TRAP		#15		*string ptr in A1,length in D1
 		CMPI.B		#00,D1		*compare D1 and 0
-		BLE		badSt		*if less than or equal to 0 
+		BLE		badEnd		*if less than or equal to 0 
 		CMPI.B		#addSz,D1	*compare D1 and 8
-		BGT		badSt		*if larger than 8 go to badSt
+		BGT		badEnd		*if larger than 8 go to badSt
 		CLR.L		D7		*clear D7
 		BSR		a_to_h		*convert to hex
 		CMPI.B		#01,D6		*check if D6 holds a 1/bad flag
 		BEQ		badEnd		*is bad go to badSt
+		CLR.L		D2		*clear register
+		MOVE.B		#addSz,D2	*put 8 in D2
+		SUB.B		D1,D2		*subtract length of string from 8
+		MULU.W		#4,D2		*multiply by 4
+		ROL.L		D2,D7		*move hex over appropriate digits
 		CMPI.L		#endAd,D7	*compare end address and D7
 		BGT		badEnd		*if larger, it's invalid
 		MOVE.L		istart,D6	*move istart to D6
@@ -96,7 +131,7 @@ badEnd		MOVE.B		#0,D6		*reset bad flag
 		LEA		endErr,A1	*A1 holds error string
 		MOVE.W		endErrL,D1	*D1 holds length of start error string
 		TRAP		#15		*do it
-		BRA		endSec		*back to end sequence for reprompt
+		BRA		endSec		*back to end sequence for repromp
 		
 buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVE.W		#region,D0	*set counter
@@ -106,20 +141,32 @@ buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVE.W		#region,D0	*set counter
 		JSR		fillBuf		*branch to fillBuf subroutine
 		
-		MOVE.L		#istart,A0	*A0 holds start of region
-		MOVE.L		#iend,A4	*A4 holds end address
+		MOVE.B		#task0,D0	*D0 holds task2, print w CR
+		LEA		headr,A1	*A1 holds error string
+		MOVE.W		headrL,D1	*D1 holds length of start error string
+		TRAP		#15		*do it
 		
-dis		JSR		data		*set up bad buffer
+		MOVE.L		#iend,A1	*move ptr to A1
+		MOVEA.L		(A1),A4		*move end address to A4
+		MOVE.L		#istart,A1	*D0 now holds a start address
+		MOVEA.L		(A1),A0		*A0 holds address
+		
+dis		JSR		data		*fill up bad buffer
 		CMPA.L		A0,A4		*compare addresses
-		BGT		stp		*stop WILL BE LOOP
-*		BRA		DECODE INSTRUCTION, A0 and D6 need to be modified,D1 needs count in bytes
-		BRA		printAsm	*print the good or bad
-		BRA		dis		*back to top		
-		
+		BLT		MNMIntro	*done with region
+		MOVE.W		#goodBuf,A3	*A3 PRT TO GOOD BUFFER
+		CLR.L		D3		*D3 HOLDS COUNT TO BUFFERS
+*		BRA		decode_inst	*A0 needst to pt to next, D6 needs 1/0,D1 needs count in byte
+		MOVE.B		#01,D6		*set bad flag
+		MOVE.W		#$12,D1		*D1 needs to hold count
+*		COUNT WORKS W WORDS??
+		JSR		printAsm	*print the good or bad buffer
+		MOVE.W		(A0)+,D6	*update A0
+		CLR.L		D6		*clear D6
+		MOVE.B		#0,D6		*reset bad flag	
+		BRA		dis		*back to top
 
 stp		STOP		#$2700		*back to simulator
-
-
 *******************************************************************************
 * Subroutine:		a_to_h
 * Description:		converts a ascii string to a hex value
@@ -128,12 +175,13 @@ stp		STOP		#$2700		*back to simulator
 * Postcondition:	will return the hex value in D7, if invalid characters
 *			in the string D6 will be set to 1
 *			A1 and D1 will be modified
-*			Internally will use D2, so pushes that on stack
+*			Internally will use D2
+*			pushes D2 and D1 on stack
 *******************************************************************************
 	
-a_to_h		MOVEM.L		D2,-(SP)	*put utility register on stack
+a_to_h		MOVEM.L		D1/D2,-(SP)	*put utility register on stack
 a_to_hSt	CMPI.B		#00,D1		*if D1 is 0 done
-		BEQ		ah_exit		*if done exit
+		BEQ		hexExit		*if done exit
 		SUBI.B		#01,D1		*update counter
 		ROL.L		#4,D7		*prepare register to take next hex
 		MOVE.B		(A1)+,D2	*D2 holds next byte to convert
@@ -152,7 +200,7 @@ a_to_hSt	CMPI.B		#00,D1		*if D1 is 0 done
 		BRA		badEx		*if haven't coverted here, it's invalid
 ah_num		SUBI.B		#$30,D2		*convert a number
 		OR.B		D2,D7		*add hex digit to D7
-		BRA		a_to_hSt		*back to loop
+		BRA		a_to_hSt	*back to loop
 ah_lc		SUBI.B		#$57,D2		*convert to Hex letter
 		OR.B		D2,D7		*add hex digit to D7
 		BRA		a_to_hSt	*back to loop
@@ -160,9 +208,11 @@ ah_uc		SUBI.B		#$37,D2		*convert to Hex letter
 		OR.B		D2,D7		*add hex digit to D7
 		BRA		a_to_hSt	*back to loop
 badEx		MOVE.B		#01,D6		*set bad flag
-		BRA		ah_exit		*then exit
-ah_exit		MOVEM.L		(SP)+,D2	*pop register off stack
+		BRA		hexExit		*then exit
+hexExit		MOVEM.L		(SP)+,D1/D2	*pop register off stack
 		RTS				*return from subroutine	
+
+
 
 *******************************************************************************
 * Subroutine:		evenCk
@@ -204,25 +254,26 @@ exit		RTS				*return to subroutine
 
 *******************************************************************************
 * Subroutine:		print_instr
-* Description:		subroutine that takes a string and copies it to a
-*			buffer/memory then adds a comma,CR,LF
-*********NICOLE: please fix up these registers per mike's request
-* Preconditions:	A0 points to string
-*			A1 points to buffer
+* Description:		subroutine that takes a string and copies it to 
+*			good buffer
+* Preconditions:	A3 points to good buffer position
 *			D1 holds length of string in words
-* Postconditions:	string will be added to memory/buffer
-*			A0 is not modified
+*			D3 holds count for good buffer
+*			A1 points to the string to be copied
+* Postconditions:	string will be added to buffer 
 *			internally will use register D0 and A2
-*			A0,A2,D0,and D1 will be pushed to stack
+*			D3 and A3 will be modified
+*			D1,A1,D0, and A2 will be pushed to stack
 *******************************************************************************
-print_instr	MOVEM.L	A0/A2/D0/D1,-(SP)	*push to stack
+print_instr	MOVEM.L	A1/A2/D1/D0,-(SP)	*push to stack
+		ADD.B	D1,D3			*update count of buffer
 prtInL		CMPI.B	#00,D1			*compare 0 to counter
 		BEQ	done			*if 0, done
-		MOVE.W	(A0)+,D0		*move next word to data register
-		MOVE.W	D0,(A1)+		*move next word from register to buffer
+		MOVE.W	(A1)+,D0		*move next word to data register
+		MOVE.W	D0,(A3)+		*move next word from register to buffer
 		SUBI.B	#01,D1			*update counter
 		BRA	prtInL			*back to loop
-done	MOVEM.L	(SP)+,A0/A2/D0/D1	*restore stack	
+done		MOVEM.L	(SP)+,A1/A2/D1/D0	*restore stack	
 		RTS				*return from subroutine
 		
 *******************************************************************************
@@ -250,8 +301,7 @@ prtGd		MOVE.L	#goodBuf,A1		*move A1 to hold string
 		TRAP	#15			*do it
 		BRA	prtDn			*done
 prtDn		MOVEM.L	(SP)+,A0/D0/D1		*restore stack
-		RTS				*return from subroutine		
-		
+		RTS				*return from subroutine	
 *******************************************************************************
 *	Subroutine:	h_to_a
 *	Description:	takes Hex value, separates into individual Hex bytes
@@ -290,15 +340,17 @@ moveOvr		ROL.L	#08,D3		*move over 2 digits
 ha_exit		MOVEM.L	(SP)+,D3/D4/D2	;pop off stack
 		RTS
 
+
+	
 *******************************************************************************
 * Subroutine:		data
 * Description:		subroutine that sets up the bad buffer to print a bad
 *			location in memory
-* Precondition:		assumes A0 points to the word in memory, and assumes 
+* Precondition:		assumes A0 points to location in memory, and assumes 
 *			will always print 1 words worth of memory
 * Postcondition:	A0 will not be changed
 *			bad buffer will be set up with the address, space, 
-*			DATA, space, word value at memory, comma, CR, LR
+*			DATA, space, word value at memory, CR, LR
 *			no return value, no use of good/bad flag
 *			internally will use A1,A3,D3,and D4
 *			will push A1,A3,D3, and D4
@@ -1199,42 +1251,49 @@ dreg_strs	DC.B  	'D0','D1','D2','D3','D4','D5','D6','D7'
 *******************************************************************************
 *	Data area
 *******************************************************************************
-intro		DC.B		'Team MNM Disassembler',CR,LF
+intro		DC.B		'Team MNMs Disassembler',CR,LF
+		DC.B		'would you like to disassembler a region of  memory?',CR,LF
+		DC.B		'Please enter Y for yes, or Q to quit program',CR,LF
 introL		DC.W		introL-intro	*length of intro message string
 stAdd		DC.B		'Please enter valid start address',CR,LF
-		DC.B		'start address must be above $00002000   '
+		DC.B		'start address must be above or equal to $00002000   '
 stAddL		DC.W		stAddL-stAdd	*length of start address message string
-endAdd		DC.B		'Please enter valid end address',CR,LF
+endAdd		DC.B		CR,LF,'Please enter valid end address',CR,LF
 		DC.B		'end address must be below $000FFFFF',CR,LF
 		DC.B		'end address must be at least 1 word larger than start address   '
 endAddL		DC.W		endAddL-endAdd	*lenght of end address message string
+
 *******************************************************************************
 *	Error Messages
 *******************************************************************************
 stErr		DC.B		'You entered and invalid start address',CR,LF
 		DC.B		'start address must be above $00002000',CR,LF
-		DC.B		'and below $000FFFFF',CR,LF,CR,LF
+		DC.B		'and below $000FFFFF',CR,LF
 stErrL		DC.W		stErrL-stErr	*length of start error message string
 endErr		DC.B		'You entered and invalid end address',CR,LF
 		DC.B 		'end address must be at least one word larger than start address',CR,LF
 		DC.B		'and smaller than $000FFFFF',CR,LF
 endErrL		DC.W		endErrL-endErr	*length of end error message string
+iErr		DC.B		'You entered an invalid value, it must be the letter',CR,LF
+		DC.B		'Y for yes or Q to quit program',CR,LF
+iErrL		DC.W		iErrL-iErr	*length of intro error message
+
 *******************************************************************************
 *	Input storage area
 *******************************************************************************
 data1		DS.B	20	*to hold input of start address
 data2		DS.B	20	*to hold input of end address
+dataSt		DS.B	20	*to hold introduction's input (Y or Q)
 istart		DS.L	1	*holds start address in hex
 iend		DS.L	1	*holds end address in hex
 
 goodBuf		DS.B	80		*reserves 80 bytes to hold good buffer
 badBuf		DS.B	80		*reserves 80 bytes to hold bad buffer
-	
-headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
+headr		DC.B	CR,LF,CR,LF,'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
-
+temp		DS.B	30		*reserves 30 bytes 4 prting instrs
+		
 		END		start
-
 
 
 
