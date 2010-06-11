@@ -407,9 +407,6 @@ decode_inst	MOVEM.L	A1-A2/D0-D2/D4/D5,-(SP)
 		MOVEA.L	A0,A5		; after-opcode pointer for EA is set up
 		MOVE.W	D2,D0		; cache a working copy of the opcode to D0
 		LSR.W	D1,D0		; D0 now has the 4 bits we need for the jump table
-		
-		ADDQ.W	#1,D0		;DEBUG: off by 1, this is almost certainly not the solution!!!!!!!!!!!!!!!!!!!!!!
-		
 		MULU.W	#6,D0		; Prepare D0 as an index into the jump table
 		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
@@ -424,7 +421,6 @@ decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read p
 
 		
 jmp_table	JMP	code0000
-		JMP	code0000
 		JMP	code0001
 		JMP	code0010
 		JMP	code0011
