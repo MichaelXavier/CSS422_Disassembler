@@ -555,14 +555,17 @@ moveml_0100	LEA	sz_l,A1		; load size L string address
 movemc_0100	BSR 	print_instr	; print out the size
 		BTST.L	#10,D0		; direction. if 0, reg to mem, else mem to reg
 		BEQ	movemr_0100
-movemm_0100	;TODO mem to reg, this is going to SUCK for EA
-movemr_0100	;TODO reg to mem, this will too
+movemm_0100	BSR	send_ea		; reg to mem
+		BSR	send_comma
+		BSR	send_movem
+		JMP	decodei_ext
+movemr_0100	BSR	send_movem	; mem to reg
+		BSR	send_comma
+		BSR	send_ea
 		JMP	decodei_ext	; we are done with the decode
 
 err_0100	MOVE.W 	#1,D6		; error!
 		JMP	decodei_ext	; we are done with the decode
-		
-		;TODO: MOVEM or throw an error
 		
 nop_0100	LEA	os_nop,A1	; we got a NOP, load the string and length
 		MOVE.W	osl_nop,D1
@@ -635,7 +638,32 @@ code0110	BSR	mask_f4		; cache full instruction word into D0
 bsr_0110	LEA	os_bsr,A1	; we got a BSR, load the string and length
 		MOVE.W	osl_bsr,D1	; FIXME: assuming that I/O's function wants them in these regs
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO: continue on with BSR stuff
+		LEA	os_dollar,A1	; send dollar for address
+		MOVE.W	os_dollarl,D1	; length for printing
+		BSR	print_instr
+		MOVEM.W	D4,-(SP)	; save D4, which will hold the count of bytes
+		ANDI 	#$FF,D0		; mask off the last 8 bits
+		CMPI.W	#$00,D0		; if its 00, its word
+		BNE	bsr_retry
+		CLR.L	D3		; clear it out to prevent conflicts, this will be passed to h_to_a
+bsr_word	MOVE.W	(A5)+,D3	; its a word. advance the after opcode pointer 
+		MOVE.B	#$4,D4		; 4 hex bytes for a word
+		JMP	bsr_cnt
+
+bsr_retry	CMPI.W	#$FF,D0		; if its FF, its long
+		BNE	bsr_byte	; otherwise its a byte
+
+bsr_long	MOVE.L	(A5)+,D3	; advance the after opcode pointer a long
+		MOVE.B	#$8,D4		; 8 hex bytes for a long
+		JMP	bsr_cnt
+
+bsr_byte	MOVE.B	(A5)+,D3	; advance the after opcode pointer a byte
+		MOVE.B	#$2,D4		; 2 hex bytes for a byte, fall through to bsr cnt
+
+bsr_cnt		BSR	h_to_a		; convert to ascii, memory pointer will be in A3
+		MOVEA.L	A3,A1		; load A3 with the string address returned
+		BSR	print_instr
+		MOVEM.W	(SP)+,D4	; restore D4
 		JMP	decodei_ext	; we are done with the decode
 		
 code0111	STOP	#$2700		;FIXME: handle better
@@ -698,23 +726,41 @@ cmp_1011	LEA	os_cmp,A1	; we got a CMP, load the string and length
 		
 code1100	MOVE.W	D2,D0		; reload the instruction
 		ANDI.W	#$1F8,D0	; take off bits 8-3
-		CMPI	#$140,D0	; the pattern 101000 there is EXG
-		BEQ	exg_1100
-		CMPI	#$148,D0	; the pattern 101001 there is EXG
-		BEQ	exg_1100
-		CMPI	#$188,D0	; the pattern 110001 there is EXG
-		BEQ	exg_1100	; otherwise, fall through to AND
+		CMPI	#$140,D0	; the pattern 101000 there is EXG with data regs
+		BEQ	exg_data
+		CMPI	#$148,D0	; the pattern 101001 there is EXG with address registers
+		BEQ	exg_addr
+		CMPI	#$188,D0	; the pattern 110001 there is EXG with data and address regs
+		BEQ	exg_both	; otherwise, fall through to AND
 
 and_1100	LEA	os_and,A1	; we got an AND, load the string and length
 		MOVE.W	osl_and,D1
 		BSR	print_instr	; print the instruction to the buffer
 		BSR	send_86op	; handle the op generically from this point forward
 		JMP	decodei_ext	; we are done with the decode
-		
-exg_1100	LEA	os_exg,A1	; we got a EXT, load the string and length
+
+exg_data	MOVEM.L	A2-A3,-(SP)	; A2 and A3 will store left/right functions; send_dreg, comma, send_dreg
+		LEA	send_dreg,A3	; left and right will be processed with dreg
+		LEA	send_dreg,A3
+		JMP	exg_cnt
+exg_addr	MOVEM.L	A2-A3,-(SP)	; left and right will be processsed with areg
+		LEA	send_areg,A3
+		LEA	send_areg,A3
+		JMP	exg_cnt
+exg_both	MOVEM.L	A2-A3,-(SP)
+		LEA	send_dreg,A3	; left will be dreg, right will be areg
+		LEA	send_areg,A3	; fall through to continue
+
+exg_cnt		LEA	os_exg,A1	; we got a EXG, load the string and length
 		MOVE.W	osl_exg,D1
 		BSR	print_instr	; print the instruction to the buffer
-		; TODO more EXG stuff
+		BSR	reg_119		; reg is now in D0, original is in D2
+		JSR	(A2)		; call left function
+		BSR	send_comma
+		MOVE.W	D2,D0		; restore the instruction
+		ANDI.W	#7,D0		; mask off the last 3 bits
+		JSR	(A3)		; call right function
+		MOVEM.L	(SP)+,A2-A3	; restore the 2 address registers										~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		JMP	decodei_ext	; we are done with the decode
 		
 code1101	BSR	extr_opmode	; opmode differentiates between ADD and ADDA
@@ -953,7 +999,7 @@ sendic		MOVEM.L	A0,-(SP)	; h_to_a messes with A0, lets save it
 **********************************************
 * send_ea - Prepare and send out the ea data to decode_ea
 * TODO: this makes assumptions about decode_ea that might be incorrect
-* D0 is a temporary register to hold a mask of the full op word
+* D0 is a temporary register to hold the EA mask of the full op word
 **********************************************
 send_ea		MOVEM.W	D0,-(SP)	; save D0
 		MOVE.W	D2,D0		; get a fresh copy of the instruction
@@ -963,8 +1009,21 @@ send_ea		MOVEM.W	D0,-(SP)	; save D0
 		RTS
 		
 **********************************************
+* send_movem - Prepare and send out ea data to EA land
+* specifically for decoding a MOVEM regiser mask.
+* D0 is a temporary register to hold the EA of the full op word
+**********************************************
+send_movem	MOVEM.W	D0,-(SP)	; save D0
+		MOVE.W	D2,D0		; get a fresh copy of the instruction
+		ANDI.W	#$3F,D0		; we only want the last 6 bits (bit pos 0-5 LSB)
+		BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit
+		MOVEM.W	(SP)+,D0	; restore D0
+		RTS
+		
+**********************************************
 * send_areg - send an address register string to the buffer
 * saves A1 and D0-D2
+* D0 is the reg number
 **********************************************
 send_areg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
 		LEA	areg_strs,A1	; load up the A registers table into A1
@@ -975,6 +1034,7 @@ send_areg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
 **********************************************
 * send_dreg - send an data register string to the buffer
 * saves A1 and D0-D2
+* D0 is the reg number
 **********************************************	
 send_dreg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
 		LEA	dreg_strs,A1	; load up the D registers table into A1
@@ -985,7 +1045,7 @@ send_dreg	MOVEM.L D0-D2/A1,-(SP)	; save A1 and D1
 *********************************************
 * g_send_reg - Generic send reg, expects A1 to hold the starting address of the table
 * NEVER called directly, always called through send_areg or send_dreg
-* D0 is the address count TODO: error check it here? I guess its impossible to exceed the number of registers
+* D0 is the address number
 * indexes into the array of registers and appends it to the buffer
 * note that this does NOT clean up after itself because it is meant to be called within the context of one
 * of the send_*reg methods
@@ -1105,6 +1165,8 @@ os_subi		DC.B	'SUBI'
 osl_subi	DC.W	osl_subi-os_subi
 os_swap		DC.B	'SWAP'
 osl_swap	DC.W	osl_swap-os_swap
+os_dollar	DC.B	'$'
+os_dollarl	DC.W	os_dollarl-os_dollar
 
 sz_b		DC.B	'.B '
 szl_b		DC.B szl_b-sz_b
@@ -1165,6 +1227,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
