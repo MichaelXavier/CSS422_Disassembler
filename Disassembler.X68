@@ -1086,7 +1086,7 @@ send_ea		MOVEM.W	D0,-(SP)	; save D0
 send_movem	MOVEM.W	D0,-(SP)	; save D0
 		MOVE.W	D2,D0		; get a fresh copy of the instruction
 		ANDI.W	#$3F,D0		; we only want the last 6 bits (bit pos 0-5 LSB)
-		;!!!!!!!!!!!!!!!!!!!!!TURN BACK ON !!!!!!!!!!!!!!!!!!!BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit
+		BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit
 		MOVEM.W	(SP)+,D0	; restore D0
 		RTS
 		
