@@ -1928,99 +1928,6 @@ brp_done	RTS			; Done.
 
 
 * Variables and Strings
-**********************************************
-* OP names
-**********************************************
-
-
-os_add		DC.B	'ADD'
-osl_add		DC.W	osl_add-os_add
-os_adda		DC.B	'ADDA'
-osl_adda	DC.W	osl_adda-os_adda
-os_addi	  	DC.B	'ADDI'
-osl_addi	DC.W	osl_addi-os_addi
-os_and	  	DC.B	'AND'
-osl_and		DC.W	osl_and-os_and
-os_andi		DC.B	'ANDI'
-osl_andi	DC.W	osl_andi-os_andi
-os_asl		DC.B	'ASL'
-osl_asl		DC.W	osl_asl-os_asl
-os_asr		DC.B	'ASR'
-osl_asr		DC.W	osl_asr-os_asr
-os_bsr		DC.B	'BSR'
-osl_bsr		DC.W	osl_bsr-os_bsr
-os_clr		DC.B	'CLR'
-osl_clr		DC.W	osl_clr-os_clr
-os_cmp		DC.B	'CMP'
-osl_cmp		DC.W	osl_cmp-os_cmp
-os_cmpa		DC.B	'CMPA'
-osl_cmpa	DC.W	osl_cmpa-os_cmpa
-os_cmpi		DC.B	'CMPI'
-osl_cmpi	DC.W	osl_cmpi-os_cmpi
-os_eor		DC.B	'EOR'
-osl_eor		DC.W	osl_eor-os_eor
-os_eori		DC.B	'EORI'
-osl_eori	DC.W	osl_eori-os_eori
-os_exg		DC.B	'EXG'
-osl_exg		DC.W	osl_exg-os_exg
-os_jmp		DC.B	'JMP'
-osl_jmp		DC.W	osl_jmp-os_jmp
-os_jsr		DC.B	'JSR'
-osl_jsr		DC.W	osl_jsr-os_jsr
-os_lea		DC.B	'LEA '
-osl_lea		DC.W	osl_lea-os_lea
-os_lsr		DC.B	'LSR'
-osl_lsr		DC.W	osl_lsr-os_lsr
-os_lsl		DC.B	'LSL'
-osl_lsl		DC.W	osl_lsl-os_lsl
-os_move		DC.B	'MOVE'
-osl_move	DC.W	osl_move-os_move
-os_movea	DC.B	'MOVEA'
-osl_movea	DC.W	osl_movea-os_movea
-os_movem	DC.B	'MOVEM'
-osl_movem	DC.W	osl_movem-os_movem
-os_neg		DC.B	'NEG'
-osl_neg		DC.W	osl_neg-os_neg
-os_nop		DC.B	'NOP'
-osl_nop		DC.W	osl_nop-os_nop
-os_not		DC.B	'NOT'
-osl_not		DC.W	osl_not-os_not
-os_or		DC.B	'OR'
-osl_or		DC.W	osl_or-os_or
-os_ori		DC.B	'ORI'
-osl_ori		DC.W	osl_ori-os_ori
-os_rol		DC.B	'ROL'
-osl_rol		DC.W	osl_rol-os_rol
-os_ror		DC.B	'ROR'
-osl_ror		DC.W	osl_ror-os_ror
-os_rts		DC.B	'RTS'
-osl_rts		DC.W	osl_rts-os_rts
-os_sub		DC.B	'SUB'
-osl_sub		DC.W	osl_sub-os_sub
-os_suba		DC.B	'SUBA'
-osl_suba	DC.W	osl_suba-os_suba
-os_subi		DC.B	'SUBI'
-osl_subi	DC.W	osl_subi-os_subi
-os_swap		DC.B	'SWAP'
-osl_swap	DC.W	osl_swap-os_swap
-
-sz_b		DC.B	'.B '
-szl_b		DC.B 	szl_b-sz_b
-sz_w		DC.B	'.W '
-szl_w		DC.B 	szl_w-sz_w
-sz_l		DC.B	'.L '
-szl_l		DC.B 	szl_b-sz_b
-
-pound		DC.B	'#$'
-poundl		DC.B 	poundl-pound
-commas		DC.B	','
-commasl		DC.B 	commasl-commas
-crs		DC.B	CR
-crsl		DC.B	crsl-crs
-lfs		DC.B	LF
-lfsl		DC.B	lfsl-lfs
-
-imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
 *********************
 * Register strings
@@ -2029,35 +1936,112 @@ areg_strs	DC.B  	'A0','A1','A2','A3','A4','A5','A6','A7'
 dreg_strs	DC.B  	'D0','D1','D2','D3','D4','D5','D6','D7'
 
 
-*******************************************************************************
-*	Data area
-*******************************************************************************
-intro		DC.B		'Team MNMs Disassembler',CR,LF
-		DC.B		'would you like to disassembler a region of  memory?',CR,LF
-		DC.B		'Please enter Y for yes, or Q to quit program',CR,LF
-introL		DC.W		introL-intro	*length of intro message string
-stAdd		DC.B		'Please enter valid start address',CR,LF
-		DC.B		'start address must be above or equal to $00002000   '
-stAddL		DC.W		stAddL-stAdd	*length of start address message string
-endAdd		DC.B		CR,LF,'Please enter valid end address',CR,LF
-		DC.B		'end address must be below $000FFFFF',CR,LF
-		DC.B		'end address must be at least 1 word larger than start address   '
-endAddL		DC.W		endAddL-endAdd	*lenght of end address message string
 
-*******************************************************************************
-*	Error Messages
-*******************************************************************************
-stErr		DC.B		'You entered and invalid start address',CR,LF
-		DC.B		'start address must be above $00002000',CR,LF
-		DC.B		'and below $000FFFFF',CR,LF
-stErrL		DC.W		stErrL-stErr	*length of start error message string
-endErr		DC.B		'You entered and invalid end address',CR,LF
-		DC.B 		'end address must be at least one word larger than start address',CR,LF
-		DC.B		'and smaller than $000FFFFF',CR,LF
-endErrL		DC.W		endErrL-endErr	*length of end error message string
-iErr		DC.B		'You entered an invalid value, it must be the letter',CR,LF
-		DC.B		'Y for yes or Q to quit program',CR,LF
-iErrL		DC.W		iErrL-iErr	*length of intro error message
+**********************************************
+* OP names
+**********************************************
+os_add			DC.B	'ADD'
+osl_add			DC.W	3
+os_adda			DC.B	'ADDA'
+osl_adda		DC.W	4
+os_addi			DC.B	'ADDI'
+osl_addi		DC.W	4
+os_and			DC.B	'AND'
+osl_and			DC.W	3
+os_andi			DC.B	'ANDI'
+osl_andi		DC.W	4
+os_asl			DC.B	'ASL'
+osl_asl			DC.W	3
+os_asr			DC.B	'ASR'
+osl_asr			DC.W	3
+os_bsr			DC.B	'BSR'
+osl_bsr			DC.W	3
+os_clr			DC.B	'CLR'
+osl_clr			DC.W	3
+os_cmp			DC.B	'CMP'
+osl_cmp			DC.W	3
+os_cmpa			DC.B	'CMPA'
+osl_cmpa		DC.W	4
+os_cmpi			DC.B	'CMPI'
+osl_cmpi		DC.W	4
+os_eor			DC.B	'EOR'
+osl_eor			DC.W	3
+os_eori			DC.B	'EORI'
+osl_eori		DC.W	4
+os_exg			DC.B	'EXG'
+osl_exg			DC.W	3
+os_jmp			DC.B	'JMP'
+osl_jmp			DC.W	3
+os_jsr			DC.B	'JSR'
+osl_jsr			DC.W	3
+os_lea			DC.B	'LEA'
+osl_lea			DC.W	3
+os_lsr			DC.B	'LSR'
+osl_lsr			DC.W	3
+os_lsl			DC.B	'LSL'
+osl_lsl			DC.W	3
+os_move			DC.B	'MOVE'
+osl_move		DC.W	4
+os_movea		DC.B	'MOVEA'
+osl_movea		DC.W	5
+os_movem		DC.B	'MOVEM'
+osl_movem		DC.W	5
+os_neg			DC.B	'NEG'
+osl_neg			DC.W	3
+os_nop			DC.B	'NOP'
+osl_nop			DC.W	3
+os_not			DC.B	'NOT'
+osl_not			DC.W	3
+os_or				DC.B	'OR'
+osl_or			DC.W	2
+os_ori			DC.B	'ORI'
+osl_ori			DC.W	3
+os_rol			DC.B	'ROL'
+osl_rol			DC.W	3
+os_ror			DC.B	'ROR'
+osl_ror			DC.W	3
+os_rts			DC.B	'RTS'
+osl_rts			DC.W	3
+os_sub			DC.B	'SUB'
+osl_sub			DC.W	3
+os_suba			DC.B	'SUBA'
+osl_suba		DC.W	4
+os_subi			DC.B	'SUBI'
+osl_subi		DC.W	4
+os_swap			DC.B	'SWAP'
+osl_swap		DC.W	4
+sz_b				DC.B	'.B '
+szl_b				DC.B 	3
+sz_w				DC.B	'.W '
+szl_w				DC.B 	3
+sz_l				DC.B	'.L '
+szl_l				DC.B 	3
+pound				DC.B	'#$'
+poundl			DC.B 	2
+commas			DC.B	','
+commasl			DC.B 	1
+os_oParen		DC.B	'('			; Open parenthesis symbol
+os_oParenL	DC.W	1	; Length of open parenthesis
+os_cParen		DC.B	')'			; Closing parenthesis symbol
+os_cParenL	DC.W	1	; Length of closing parenthesis
+os_inc			DC.B	'+'			; Addition/Increment symbol
+os_incL			DC.W	1		; Length of addition/increment
+os_dec			DC.B	'-'			; Subtraction/Decrement symbol
+os_decL			DC.W	1		; Length of subtraction/decrement
+os_pound		DC.B	'#'			; Pound symbol for immediate data
+os_poundL		DC.W	1	; Length of pound
+os_dollar		DC.B	'$'			; Dollar symbol for hex
+os_dollarL	DC.W	1	; Length of dollar sign (hex)
+os_comma		DC.B	','			; Symbol for the comma ','
+os_commaL		DC.W	1	; Length of the comma symbol
+os_pc				DC.B	'(PC)'			; String for 'Program Counter'
+os_pcL			DC.W	4		; Length of 'PC'
+os_word			DC.B	'.W'			; String for word length
+os_wordL		DC.W	2	; Length for the word length
+os_long			DC.B	'.L'			; String for long length
+os_longL		DC.W	2	; Length for the long length
+
+
 
 *******************************************************************************
 *	Input storage area
@@ -2068,11 +2052,44 @@ dataSt		DS.B	20	*to hold introduction's input (Y or Q)
 istart		DS.L	1	*holds start address in hex
 iend		DS.L	1	*holds end address in hex
 
+headr		DC.B	CR,LF,CR,LF,'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
+headrL		DC.W	42		*holds length of header string
+
 goodBuf		DS.B	80		*reserves 80 bytes to hold good buffer
 badBuf		DS.B	80		*reserves 80 bytes to hold bad buffer
-headr		DC.B	CR,LF,CR,LF,'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
-headrL		DC.W	headrL-headr		*holds length of header string
 temp		DS.B	30		*reserves 30 bytes 4 prting instrs
+
+imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
+
+crs					DC.B	CR
+crsl				DC.B	1
+lfs					DC.B	LF
+lfsl				DC.B	1
+
+
+intro		DC.B		'Team MNMs Disassembler',CR,LF
+		DC.B		'would you like to disassembler a region of  memory?',CR,LF
+		DC.B		'Please enter Y for yes, or Q to quit program',CR,LF
+introL  DC.W    123
+stAdd		DC.B		'Please enter valid start address',CR,LF
+		DC.B		'start address must be above or equal to $00002000   '
+stAddL  DC.W    86
+endAdd		DC.B		CR,LF,'Please enter valid end address',CR,LF
+		DC.B		'end address must be below $000FFFFF',CR,LF
+		DC.B		'end address must be at least 1 word larger than start address   '
+endAddL DC.W    135
+
+stErr		DC.B		'You entered and invalid start address',CR,LF
+		DC.B		'start address must be above $00002000',CR,LF
+		DC.B		'and below $000FFFFF',CR,LF
+stErrL  DC.W    99
+endErr		DC.B		'You entered and invalid end address',CR,LF
+		DC.B 		'end address must be at least one word larger than start address',CR,LF
+		DC.B		'and smaller than $000FFFFF',CR,LF
+endErrL DC.W    130
+iErr		DC.B		'You entered an invalid value, it must be the letter',CR,LF
+		DC.B		'Y for yes or Q to quit program',CR,LF
+iErrL   DC.W    85
 
 *****************************************
 * 	EA Variables and Strings        *
@@ -2083,31 +2100,6 @@ asc_wrd		DS.W	1		; This is the location where I'll be
 					  ; that will be output to the good buffer.
 					  ; This is used for EA modes for immediate
 					  ; data and also absolute addressing.
-
-*********************************************************
-* 		Additional EA Strings			*
-*********************************************************
-
-os_oParen	DC.B	'('			; Open parenthesis symbol
-os_oParenL	DC.W	os_oParenL-os_oParen	; Length of open parenthesis
-os_cParen	DC.B	')'			; Closing parenthesis symbol
-os_cParenL	DC.W	os_cParenL-os_cParen	; Length of closing parenthesis
-os_inc		DC.B	'+'			; Addition/Increment symbol
-os_incL		DC.W	os_incL-os_inc		; Length of addition/increment
-os_dec		DC.B	'-'			; Subtraction/Decrement symbol
-os_decL		DC.W	os_decL-os_dec		; Length of subtraction/decrement
-os_pound	DC.B	'#'			; Pound symbol for immediate data
-os_poundL	DC.W	os_poundL-os_pound	; Length of pound
-os_dollar	DC.B	'$'			; Dollar symbol for hex
-os_dollarL	DC.W	os_dollarL-os_dollar	; Length of dollar sign (hex)
-os_comma	DC.B	','			; Symbol for the comma ','
-os_commaL	DC.W	os_commaL-os_comma	; Length of the comma symbol
-os_pc		DC.B	'(PC)'			; String for 'Program Counter'
-os_pcL		DC.W	os_pcL-os_pc		; Length of 'PC'
-os_word		DC.B	'.W'			; String for word length
-os_wordL	DC.W	os_wordL-os_word	; Length for the word length
-os_long		DC.B	'.L'			; String for long length
-os_longL	DC.W	os_longL-os_long	; Length for the long length
 
 		
 		END		start
