@@ -347,7 +347,12 @@ decode_inst	MOVEM.L	A1-A2/D0-D2/D4/D5,-(SP)
 		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
 decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read pointer
-			; TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!: send CL/RF
+		LEA	crs,A1			; send cr
+		MOVE.W	crsl,D1			
+		BSR	print_instr
+		LEA	lfs,A1			; send lf
+		MOVE.W	lfsl,D1			
+		BSR	print_instr
 		MOVEM.L	(SP)+,A1-A2/D0-D2/D4/D5	; restore all the registers we used
 
 		
@@ -429,7 +434,6 @@ code0001c	LEA	os_move,A1	; we got an MOVE.B, load the string and length
 		MOVE.W	szl_b,D1	; load the string length
 		MOVE.W	#0,D5		; Save the size for EA
 		BSR 	print_instr	; print out the size
-		; TODO: rejoin other MOVES and handle the rest
 		JMP	decodei_ext	; we are done with the decode
 
 code0010	BSR	extr_opmode	; pull out 8-6 bits into D0
@@ -998,7 +1002,6 @@ sendic		MOVEM.L	A0,-(SP)	; h_to_a messes with A0, lets save it
 		
 **********************************************
 * send_ea - Prepare and send out the ea data to decode_ea
-* TODO: this makes assumptions about decode_ea that might be incorrect
 * D0 is a temporary register to hold the EA mask of the full op word
 **********************************************
 send_ea		MOVEM.W	D0,-(SP)	; save D0
@@ -1169,16 +1172,20 @@ os_dollar	DC.B	'$'
 os_dollarl	DC.W	os_dollarl-os_dollar
 
 sz_b		DC.B	'.B '
-szl_b		DC.B szl_b-sz_b
+szl_b		DC.B 	szl_b-sz_b
 sz_w		DC.B	'.W '
-szl_w		DC.B szl_w-sz_w
+szl_w		DC.B 	szl_w-sz_w
 sz_l		DC.B	'.L '
-szl_l		DC.B szl_b-sz_b
+szl_l		DC.B 	szl_b-sz_b
 
 pound		DC.B	'#$'
-poundl		DC.B poundl-pound
+poundl		DC.B 	poundl-pound
 commas		DC.B	','
-commasl		DC.B commasl-commas
+commasl		DC.B 	commasl-commas
+crs		DC.B	CR
+crsl		DC.B	crsl-crs
+lfs		DC.B	LF
+lfsl		DC.B	lfsl-lfs
 
 imm_str		DS.B  	8 		; immediate hex value string, supports up to 32 bits (8 hex nibbles)
 
@@ -1227,6 +1234,7 @@ headr		DC.B	'MEMORY LOCATION   OP-CODE   OPERAND',CR,LF
 headrL		DC.W	headrL-headr		*holds length of header string
 
 		END		start
+
 
 
 
