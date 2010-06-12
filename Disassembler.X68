@@ -1125,7 +1125,7 @@ send_movem	MOVEM.W	D0-D1,-(SP)	; save D0 and D1
 		ANDI.W	#$400,D0	; we only want the 10th bit
 		MOVE.W	#$10,D1
 		LSR.W	D1,D0		; roll it 10 so its just a number
-		; BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit !!!!!! TURN THIS BACK ON TODO
+		BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit !!!!!! TURN THIS BACK ON TODO
 		MOVEM.W	(SP)+,D0	; restore D0
 		RTS
 		
@@ -1956,6 +1956,129 @@ brp_dreg	BSR	send_dreg	; Don't have to delete anything.  Just print
 					  ; data the register.
 
 brp_done	RTS			; Done.
+
+*********************************************************
+* movem_ea
+*
+* Description:	This subroutine deals specifically with printing out the 
+*		list of registers from MOVEM's register list mask field
+*		(which is held in the extension word).  This subroutine
+*		determines whether MOVEM is in predecrement or postincrement
+*		mode based on bit 10 (the direction bit).  According to the
+*		68K manual, predecrement mode only allows a register-to-memory
+*		operation (bit 10 == 0), and postincrement mode only allows
+*		a memory-to-register operation (bit 10 == 1).  Based on
+*		whether MOVEM is in predecrement or postincrement, the
+*		register list mask field may be reversed:
+*		  - Postincrement:	A7..A0,D7..D0
+*		  - Predecrement:	D0..D7,A0..A7
+*		This subroutine will determine the direction of the operation
+*		based on bit 10 and will output the correct data and/or address
+*		registers to the good buffer, separated by '/'.
+*
+* Preconditions:
+*	- D0: Contains the value for bit 10 of MOVEM's instruction
+*		- Bit 10 = the direction (dr) bit
+*			- 0: Register-to-Memory (Predecrement)
+*			- 1: Memory-to-Register (Postincrement)
+*	- D6: Contains the value for the bad flag
+*		- 0: Good so far
+*		- 1: Bad (due to error)
+*	- A5: Points to the extension word right after the instruction word
+*		- Should be pointing to the beginning of the register
+*		  list mask field (16-bits/1 word).
+*		- Each active bit (according to its bit position) in the
+*		  register mask field indicates that that particular register
+*		  is being used.
+*		- The most significant bit is on the left (bit 15), and bit
+*		  positions go from bit 0-15.
+*		- If it is in postincrement, the bits go from: A7..A0,D7..D0
+*		- If it is in predecrement, the bits go from: D0..D7,A0..A7
+*
+* Postconditions:
+*	- Displays MOVEM's used data and address registers to the good buffer.
+*	- Each register is separated by a '/'
+*	- Example:
+*		D0/D1/D2/D7/A2/A5
+*
+*********************************************************
+movem_ea	MOVEM.L	D0-D5/A1,-(SP)
+		
+		MOVE.L	D0,D4			; Save the direction bit to D4 just in case
+		MOVE.W	(A5)+,D1		; Stick the register list mask field in D1
+						  ; and advance the pointer
+		MOVE.L	D1,D5			; Save the direction bit to D4 just in case
+		CLR.L	D2			; Clear the Register Lisk Mask Field counter
+						  ; This counter only goes between 0..15
+		CLR.L	D3			; Clear the output register number counter
+						  ; This counter only goes between 0..7
+		
+		CMPI	#0,D0			; Check if it's predecrement
+		BEQ	movem_pre		; Go handle the predecrement version
+		MOVE.B	#15,D2			; Start the RLMF counter at 15 if it's postincrement
+		CMPI	#1,D0			; Check if it's postincrement
+		BEQ	movem_post		; Go handle the postincrement version
+		
+		MOVE.B	#1,D6			; It's neither 0 or 1 - Invalid bit 10.
+						  ; Raise the bad flag.
+		BRA	movem_done		; Go to the end.
+
+	; Predecrement Mode		
+movem_pre	BTST	D2,D1			; Check bit the current bit of the register list mask field
+		BEQ	pre_inc			; If bit isn't active, skip to the next bit test
+		MOVE.B	D3,D0			; Get prepared to print the register number
+		CMPI	#8,D2			; Check if we crossed the threshold into address registers
+		BLT	pre_d_pr		; If it's less than bit 8 in the RLMF, it's a data register
+		BSR	send_areg		; Print the address register to the good buffer
+		BRA	pre_slash
+pre_d_pr	BSR	send_dreg		; Print the data register to the good buffer
+		
+pre_slash	LEA	os_slash,A1		; Get the ASCII character for '/'
+		MOVE.W	os_slashL,D1		; Load its length
+		BSR	print_instr		; Print the '/' to the good buffer
+		MOVE.L	D5,D1			; Get the original RLMF from D4
+		
+pre_inc		ADDI.B	#1,D2			; Increment the RLMF counter
+		CMPI.B	#16,D2			; Check if we passed the bounds for the RLMF
+		BEQ	movem_done		; If we reached the end, then we're done
+		ADDI.B	#1,D3			; Increment the output register counter
+		CMPI.B	#8,D3			; Check if we passed the bounds for a 68K register
+		BEQ	pre_re_reg		; If we passed it, then reset the register counter back to 0
+		BRA	movem_pre		; Go back to the top and test again
+
+pre_re_reg	CLR.W	D3			; Resets the register counter back to 0
+		BRA	movem_pre		; Go back to the top and test again
+		
+	********************************************************************
+
+	; Postincrement Mode
+movem_post	BTST	D2,D1			; Check bit the current bit of the register list mask field
+		BEQ	post_dec		; If bit isn't active, skip to the next bit test
+		MOVE.B	D3,D0			; Get prepared to print the register number
+		CMPI	#8,D2			; Check if we crossed the threshold into address registers
+		BGT	post_d_pr		; If it's less than bit 8 in the RLMF, it's a data register
+		BSR	send_areg		; Print the address register to the good buffer
+		BRA	post_slash		; Skip over the next instruction
+post_d_pr	BSR	send_dreg		; Print the data register to the good buffer
+		
+post_slash	LEA	os_slash,A1		; Get the ASCII character for '/'
+		MOVE.W	os_slashL,D1		; Load its length
+		BSR	print_instr		; Print the '/' to the good buffer
+		MOVE.L	D5,D1			; Get the original RLMF from D4
+		
+post_dec	SUBI.B	#1,D2			; Decrement the RLMF counter
+		CMPI.B	#0,D2			; Check if we passed the bounds for the RLMF
+		BLT	movem_done		; If we reached the end, then we're done
+		ADDI.B	#1,D3			; Increment the output register counter
+		CMPI.B	#8,D3			; Check if we passed the bounds for a 68K register
+		BEQ	post_re_reg		; If we passed it, then reset the register counter back to 0
+		BRA	movem_post		; Go back to the top and test again
+
+post_re_reg	CLR.W	D3			; Resets the register counter back to 0
+		BRA	movem_post		; Go back to the top and test again
+		
+movem_done	MOVEM.L	(SP)+,D0/D1/D3/A1
+		RTS				; Finished.
 		
 **************************************************************************
 *			END OF EA CODE				 *
@@ -2079,7 +2202,8 @@ os_word			DC.B	'.W'			; String for word length
 os_wordL		DC.W	2	; Length for the word length
 os_long			DC.B	'.L'			; String for long length
 os_longL		DC.W	2	; Length for the long length
-
+os_slash	DC.B	'/'		; Slash symbol (used to separate registers)
+os_slashL	DC.W	1		; Length of the slash symbol
 
 
 *******************************************************************************
