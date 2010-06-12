@@ -73,7 +73,7 @@ stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		MOVE.W		stAddL,D1	*D1 holds length of start string
 		TRAP		#15		*do it
 		
-		JMP 		STUB_INPUT	*!!!!!!!!!!!!!!!!STUB PLEASE REMOVE ME TODO
+		;JMP 		STUB_INPUT	*!!!!!!!!!!!!!!!!STUB PLEASE REMOVE ME TODO
 		
 		MOVE.B		#task2,D0	*D0 holds task2, take input
 		LEA		data1,A1	*to hold input string
@@ -161,31 +161,43 @@ buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVE.L		#istart,A1	*D0 now holds a start address
 		MOVEA.L		(A1),A0		*A0 holds address
 		MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
+		CLR.L		D6
 		
-STUB_INPUT	MOVEA.L		#$4000,A1	; stub the start address to A1
-		MOVEA.L		#$4008,A4	; stub the end address to A4
-		MOVE.W		#8,D4		; dump to 
+;STUB_INPUT	MOVEA.L		#$4000,A0	; stub the start address to A0
+;		MOVEA.L		#$4008,A4	; stub the end address to A4
+;		MOVE.W		#8,D4		; dump to 
 		
 dis		JSR		data		*fill up bad buffer
+		MOVE.W		#goodBuf,A3	*A3 PRT TO GOOD BUFF
 		CMPA.L		A0,A4		*compare addresses
 		BLT		MNMIntro	*done with region
 		CMPI.B		#00,D4		*compare lines ctr to 0
 		BEQ		continue	*if have reached, continue
+		MOVEA.L	#goodBuf,A3		*A3 points to start of buf
+		MOVEA.L	A0,A1			*use A1 internally	
+		MOVE.L	A1,D3			*D3 holds address in hex
+		MOVE.B	#addSz,D4		*D4 holds counter
+		JSR	h_to_a			*convert and save
+		MOVE.B	#space,(A3)+		*move a space 
 		SUBI.B		#01,D4		*update lines counter
-		MOVE.W		#goodBuf,A3	*A3 PRT TO GOOD BUFFER
-		CLR.L		D3		*D3 HOLDS COUNT TO BUFFERS
+		CLR.L		D3
+		MOVE.W		#09,D3		; we have read 9 ascii chars so far
+		
+		MOVE.L		A3,(curbuf)	; save the current buffer location to memory
+		MOVE.W		D3,(curct)	; save the current count in the good buffer to memory
 		BSR		decode_inst	*A0 needst to pt to next, D6 needs 1/0,D1 needs count in byte
+		MOVEA.L		curbuf,A3	; restore buffer location
+		MOVE.W		(curct),D3	; restore the buffer count from memory
+		
 		MOVE.B		#CR,(A3)+		*put in CR
 		MOVE.B		#comma,(A3)+		*put in comma
-		MOVE.B		#CR,(A3)+	*put in CR
-		MOVE.B		#comma,(A3)+	*put in comma
 		MOVE.B		#LF,(A3)+		*put in LF	
 		ADDI.B		#$03,D3		*add 3 to byte count for CR,LF
-		MOVE.B		D3,D1		*for printAsm D1 needs to hold count	
+		MOVE.B		D3,D1		*for printAsm D1 needs to hold count
+		MOVE.L		A3,(curbuf)	; save the pos in buffer back to memory
+		MOVE.L		D3,(curct)	; save the count back to memory	
 		JSR		printAsm	*print the good or bad buffer
-*		MOVE.W		(A0)+,D6	*update A0
 		CLR.L		D6		*clear D6
-		MOVE.B		#0,D6		*reset bad flag	
 		BRA		dis		*back to top
 		
 continue	MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
@@ -303,7 +315,8 @@ exitBuf		RTS				*return to subroutine
 * Subroutine:		print_instr
 * Description:		subroutine that takes a string and copies it to 
 *			good buffer
-* Preconditions:	A3 points to good buffer position
+* Preconditions:	
+*			A3 points to good buffer position
 *			D1 holds length of string in words
 *			D3 holds count for good buffer
 *			A1 points to the string to be copied
@@ -313,14 +326,15 @@ exitBuf		RTS				*return to subroutine
 *			D1,A1,D0, and A2 will be pushed to stack
 *******************************************************************************
 print_instr	MOVEM.L	A1/A2/D1/D0,-(SP)	*push to stack
-		ADD.B	D1,D3			*update count of buffer
+		ADD.W	D1,(curct)		*update count of buffer
 prtInL		CMPI.B	#00,D1			*compare 0 to counter
 		BEQ	done			*if 0, done
-		MOVE.W	(A1)+,D0		*move next word to data register
-		MOVE.W	D0,(A3)+		*move next word from register to buffer
+		MOVE.B	(A1)+,D0		*move next word to data register
+		MOVE.B	D0,(A3)+		*move next word from register to buffer
 		SUBI.B	#01,D1			*update counter
 		BRA	prtInL			*back to loop
-done		MOVEM.L	(SP)+,A1/A2/D1/D0	*restore stack	
+done		MOVE.L	A3,(curbuf)		* save the address of the current pos in buffer back into memory
+		MOVEM.L	(SP)+,A1/A2/D1/D0	*restore stack	
 		RTS				*return from subroutine
 		
 *******************************************************************************
@@ -442,7 +456,7 @@ data		MOVEM.L	A1/A3/D3/D4,-(SP)	;save to stack
 * A5 - pointer to data after the opcode that is advanced/used by EA. not restored
 * D5 - Byte-long indicator of instruction size needed for some immediate modes by EA. restored
 **********************************************
-decode_inst	MOVEM.L	A1-A2/D0-D2/D4/D5,-(SP)
+decode_inst	MOVEM.L	A1-A2/D0-D2/D4-D5,-(SP)
 		LEA	jmp_table,A1	; prepare to index into the jump table
 		MOVE.L	A0,D4		; cache starting address for PC in ea land
 		MOVEA.L	A0,A2		; cache the starting address for counting purposes
@@ -452,17 +466,11 @@ decode_inst	MOVEM.L	A1-A2/D0-D2/D4/D5,-(SP)
 		MOVE.W	D2,D0		; cache a working copy of the opcode to D0
 		LSR.W	D1,D0		; D0 now has the 4 bits we need for the jump table
 		MULU.W	#6,D0		; Prepare D0 as an index into the jump table
-		JSR	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
+		JMP	00(A1,D0)	; spool up FTL drives, Mr. Gaeta
 
-decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read pointer
-		LEA	crs,A1			; send cr
-		MOVE.W	crsl,D1			
-		BSR	print_instr
-		LEA	lfs,A1			; send lf
-		MOVE.W	lfsl,D1			
-		BSR	print_instr
-		MOVEM.L	(SP)+,A1-A2/D0-D2/D4/D5	; restore all the registers we used
-
+decodei_ext	MOVEA.L	A5,A0			; advance the pointer up to where EA left its read pointer		
+		MOVEM.L	(SP)+,A1-A2/D0-D2/D4-D5	; restore all the registers we used
+		RTS
 		
 jmp_table	JMP	code0000
 		JMP	code0001
@@ -753,6 +761,7 @@ bsr_0110	LEA	os_bsr,A1	; we got a BSR, load the string and length
 		MOVE.W	os_dollarl,D1	; length for printing
 		BSR	print_instr
 		MOVEM.W	D4,-(SP)	; save D4, which will hold the count of bytes
+		CLR.L	D4		; clear out the length counter
 		ANDI 	#$FF,D0		; mask off the last 8 bits
 		CMPI.W	#$00,D0		; if its 00, its word
 		BNE	bsr_retry
@@ -771,8 +780,9 @@ bsr_long	MOVE.L	(A5)+,D3	; advance the after opcode pointer a long
 bsr_byte	MOVE.B	(A5)+,D3	; advance the after opcode pointer a byte
 		MOVE.B	#$2,D4		; 2 hex bytes for a byte, fall through to bsr cnt
 
-bsr_cnt		BSR	h_to_a		; convert to ascii, memory pointer will be in A3
-		MOVEA.L	A3,A1		; load A3 with the string address returned
+bsr_cnt		LEA	asc_wrd,A3	; destination address
+		BSR	h_to_a		; convert to ascii, memory pointer will be in A3
+		LEA	asc_wrd,A1	; load A1 with the string to print
 		BSR	print_instr
 		MOVEM.W	(SP)+,D4	; restore D4
 		JMP	decodei_ext	; we are done with the decode
@@ -2261,6 +2271,8 @@ conti		DC.B	CR,LF,'Would you like to continue disassembling?',CR,LF
 		DC.B	'Please enter letter Y for yes and Q for quit',CR,LF
 contiL		DC.W	91
 
+curbuf		DS.L	1	; current position in the buffer
+curct		DS.W	1	; current count inside the good buffer
 
 *****************************************
 * 	EA Variables and Strings        *
@@ -2274,6 +2286,10 @@ asc_wrd		DS.W	1		; This is the location where I'll be
 
 		
 		END		start
+
+
+
+
 
 
 
