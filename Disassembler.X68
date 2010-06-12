@@ -177,9 +177,13 @@ dis		JSR		data		*fill up bad buffer
 		BSR		decode_inst	*A0 needst to pt to next, D6 needs 1/0,D1 needs count in byte
 		MOVE.B		#CR,(A3)+		*put in CR
 		MOVE.B		#comma,(A3)+		*put in comma
-		MOVE.B		#LF,(A3)+		*put in LR	
+		MOVE.B		#CR,(A3)+	*put in CR
+		MOVE.B		#comma,(A3)+	*put in comma
+		MOVE.B		#LF,(A3)+		*put in LF	
+		ADDI.B		#$03,D3		*add 3 to byte count for CR,LF
+		MOVE.B		D3,D1		*for printAsm D1 needs to hold count	
 		JSR		printAsm	*print the good or bad buffer
-		MOVE.W		(A0)+,D6	*update A0
+*		MOVE.W		(A0)+,D6	*update A0
 		CLR.L		D6		*clear D6
 		MOVE.B		#0,D6		*reset bad flag	
 		BRA		dis		*back to top
