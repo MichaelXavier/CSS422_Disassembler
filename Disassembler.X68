@@ -72,9 +72,6 @@ stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		LEA		stAdd,A1	*A1 holds string asking for start
 		MOVE.W		stAddL,D1	*D1 holds length of start string
 		TRAP		#15		*do it
-		
-		;JMP 		STUB_INPUT	*!!!!!!!!!!!!!!!!STUB PLEASE REMOVE ME TODO
-		
 		MOVE.B		#task2,D0	*D0 holds task2, take input
 		LEA		data1,A1	*to hold input string
 		TRAP		#15		*string ptr in A1,length in D1
@@ -162,11 +159,6 @@ buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVEA.L		(A1),A0		*A0 holds address
 		MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
 		CLR.L		D6
-		
-;STUB_INPUT	MOVEA.L		#$4000,A0	; stub the start address to A0
-;		MOVEA.L		#$4008,A4	; stub the end address to A4
-;		MOVE.W		#8,D4		; dump to 
-		
 dis		JSR		data		*fill up bad buffer
 		MOVE.W		#goodBuf,A3	*A3 PRT TO GOOD BUFF
 		CMPA.L		A0,A4		*compare addresses
