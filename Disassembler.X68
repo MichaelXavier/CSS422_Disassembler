@@ -9,6 +9,9 @@ START:				; first instruction of program
 
 
 		OPT		CRE		*so I can see Symbol Table
+invalidS	EQU		$000FFFFE	*start can't be this
+doll		EQU		$24		*for ASCII $
+outCt		EQU		20		*20 lines per screen
 CR		EQU		$0D		*ASCII for carriage return
 LF		EQU		$0A		*ASCII for line feed
 task0		EQU		00		*to hold task 0
@@ -89,7 +92,7 @@ stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		BSR		evenCk		*need to check if address is even 
 		CMPI.L		#strtAd,D7	*compare start and D7
 		BLT		badSt		*if smaller then is a bad address
-		CMPI.L		#endAd,D7	*if end address is smaller, bad
+		CMPI.L		#invalidS,D7	*if end address is smaller, bad
 		BGE		badSt		*if start is larger than end, bad
 		MOVE.L		D7,istart	*istart holds valid start address in hex
 		BRA		endSec		*go to end sequence
@@ -125,6 +128,7 @@ endSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		CMPI.L		#endAd,D7	*compare end address and D7
 		BGT		badEnd		*if larger, it's invalid
 		MOVE.L		istart,D6	*move istart to D6
+		ADDI.L		#01,D6
 		CMP.L		D6,D7		*compare istart and end address
 		BLE		badEnd		*if it's less than or equal, bad
 		MOVE.L		D7,iend		*iend holds valid start address in hex
@@ -154,21 +158,52 @@ buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVEA.L		(A1),A4		*move end address to A4
 		MOVE.L		#istart,A1	*D0 now holds a start address
 		MOVEA.L		(A1),A0		*A0 holds address
+		MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
 		
 dis		JSR		data		*fill up bad buffer
 		CMPA.L		A0,A4		*compare addresses
 		BLT		MNMIntro	*done with region
+		CMPI.B		#00,D4		*compare lines ctr to 0
+		BEQ		continue	*if have reached, continue
+		SUBI.B		#01,D4		*update lines counter
 		MOVE.W		#goodBuf,A3	*A3 PRT TO GOOD BUFFER
 		CLR.L		D3		*D3 HOLDS COUNT TO BUFFERS
 		BSR		decode_inst	*A0 needst to pt to next, D6 needs 1/0,D1 needs count in byte
-		*MOVE.B		#01,D6		*set bad flag
-		MOVE.W		#$12,D1		*D1 needs to hold count
-*		COUNT WORKS W WORDS??
+		MOVE.B		#CR,(A3)+		*put in CR
+		MOVE.B		#comma,(A3)+		*put in comma
+		MOVE.B		#LF,(A3)+		*put in LR	
 		JSR		printAsm	*print the good or bad buffer
 		MOVE.W		(A0)+,D6	*update A0
 		CLR.L		D6		*clear D6
 		MOVE.B		#0,D6		*reset bad flag	
 		BRA		dis		*back to top
+		
+continue	MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
+		MOVE.B		#task0,D0	*D0 hols task0, print w CR
+		LEA		conti,A1	*A1 holds intro string
+		MOVE.W		contiL,D1	*D1 holds length of intro string
+		TRAP		#15		*do it
+		
+		MOVE.B		#task2,D0	*D0 holds task2, take input
+		LEA		dataSt,A1	*string to hold input
+		TRAP		#15		*string ptr in A1,length in D1
+		MOVE.B		(A1),D2		*so D2 holds first byte of input
+		CMPI.B		#upY,D2		*is D2 a Y
+		BEQ		dis		*then start disassembling
+		CMPI.B		#lwY,D2		*is D2 a y
+		BEQ		dis		*then start disassembling
+		CMPI.B		#upQ,D2		*is D2 a Q
+		BEQ		stp		*then done, stop
+		CMPI.B		#lwQ,D2		*is D2 a q
+		BEQ		stp		*then done, stop
+		BRA		bcontnu		*invalid input	
+		
+bcontnu		MOVE.B		#task0,D0	*D0 holds task2, print w CR
+		LEA		iErr,A1		*A1 holds error string
+		MOVE.W		iErrL,D1	*D1 holds length of start error string
+		TRAP		#15		*do it
+		BRA		MNMIntro	*back to start sequence for reprompt
+
 
 stp		STOP		#$2700		*back to simulator
 *******************************************************************************
@@ -216,8 +251,6 @@ badEx		MOVE.B		#01,D6		*set bad flag
 hexExit		MOVEM.L		(SP)+,D1/D2	*pop register off stack
 		RTS				*return from subroutine	
 
-
-
 *******************************************************************************
 * Subroutine:		evenCk
 * Description:		checks if Hex address is even or odd
@@ -250,11 +283,11 @@ even		MOVEM.L	(SP)+,D2		*pop resister off stack
 *			nothing pushed on stack		
 *******************************************************************************
 fillBuf		CMPI.W	#00,D0			*see if D0 is empty
-		BEQ	exit			*if empty exit
+		BEQ	exitBuf			*if empty exit
 		MOVE.B	#space,(A0)+		*copy space and ++
 		SUBI.W	#01,D0			*update counter
 		BRA	fillBuf			*branch to top of routine
-exit		RTS				*return to subroutine
+exitBuf		RTS				*return to subroutine
 
 *******************************************************************************
 * Subroutine:		print_instr
@@ -296,7 +329,8 @@ printAsm	MOVEM.L	A0/D0/D1,-(SP)		*push to stack
 		CMPI.B	#01,D6			*check if D6 holds a 1/bad flag
 		BEQ	prtBd			*if bad print bad buffer
 		BRA	prtGd			*if not bad must be good
-prtBd		MOVE.L	#badBuf,A1		*A1 holds start of badBuffer		
+prtBd		MOVE.L	#badBuf,A1		*A1 holds start of badBuffer
+		MOVE.W	#$13,D1			*D1 needs to hold count
 		MOVE.B	#task0,D0		*D0,A1, and D1 sb set up
 		TRAP	#15			*do it
 		BRA	prtDn			*done
@@ -305,7 +339,7 @@ prtGd		MOVE.L	#goodBuf,A1		*move A1 to hold string
 		TRAP	#15			*do it
 		BRA	prtDn			*done
 prtDn		MOVEM.L	(SP)+,A0/D0/D1		*restore stack
-		RTS				*return from subroutine	
+		RTS				*return from subroutine		
 *******************************************************************************
 *	Subroutine:	h_to_a
 *	Description:	takes Hex value, separates into individual Hex bytes
@@ -372,10 +406,10 @@ data		MOVEM.L	A1/A3/D3/D4,-(SP)	;save to stack
 		MOVE.B	#T,(A3)+		*move T to memory and ++
 		MOVE.B	#A,(A3)+		*move A to memory
 		MOVE.B	#space,(A3)+		*move a space
+		MOVE.B	#doll,(A3)+		*add a dollar sign
 		MOVE.W	(A1),D3			*D3 holds word of memory in hex
 		MOVE.B	#wdSz,D4		*D4 holds count
 		JSR	h_to_a			*convert and save
-		MOVE.B	#comma,(A3)+		*put in comma
 		MOVE.B	#CR,(A3)+		*put in CR
 		MOVE.B	#comma,(A3)+		*put in comma
 		MOVE.B	#LF,(A3)+		*put in LR	
