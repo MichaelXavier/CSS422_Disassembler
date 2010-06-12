@@ -73,6 +73,8 @@ stSec		MOVE.B		#task1,D0	*D0 holds task1, print wo CR
 		MOVE.W		stAddL,D1	*D1 holds length of start string
 		TRAP		#15		*do it
 		
+		JMP 		STUB_INPUT	*!!!!!!!!!!!!!!!!STUB PLEASE REMOVE ME TODO
+		
 		MOVE.B		#task2,D0	*D0 holds task2, take input
 		LEA		data1,A1	*to hold input string
 		TRAP		#15		*string ptr in A1,length in D1
@@ -159,6 +161,10 @@ buffy		MOVE.W		#goodBuf,A0	*set pointer
 		MOVE.L		#istart,A1	*D0 now holds a start address
 		MOVEA.L		(A1),A0		*A0 holds address
 		MOVE.B		#outCt,D4	*D4 holds 20 for lines to screen
+		
+STUB_INPUT	MOVEA.L		#$4000,A1	; stub the start address to A1
+		MOVEA.L		#$4008,A4	; stub the end address to A4
+		MOVE.W		#8,D4		; dump to 
 		
 dis		JSR		data		*fill up bad buffer
 		CMPA.L		A0,A4		*compare addresses
@@ -1111,13 +1117,15 @@ send_ea		MOVEM.W	D0,-(SP)	; save D0
 **********************************************
 * send_movem - Prepare and send out ea data to EA land
 * specifically for decoding a MOVEM regiser mask.
-* D0 is a temporary register to hold the EA of the full op word
+* D0 is a temporary register to hold the EA of the full op word, restored
+* D1 is a tempoarary shift count and is restored
 **********************************************
-send_movem	MOVEM.W	D0,-(SP)	; save D0
+send_movem	MOVEM.W	D0-D1,-(SP)	; save D0 and D1
 		MOVE.W	D2,D0		; get a fresh copy of the instruction
 		ANDI.W	#$400,D0	; we only want the 10th bit
-		LSR.W	#$10,D0		; roll it 10 so its just a number
-		BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit
+		MOVE.W	#$10,D1
+		LSR.W	D1,D0		; roll it 10 so its just a number
+		; BSR	movem_ea	; send it off into ea land, if something went bad, it will set a bad bit !!!!!! TURN THIS BACK ON TODO
 		MOVEM.W	(SP)+,D0	; restore D0
 		RTS
 		
@@ -2121,6 +2129,10 @@ endErrL DC.W    130
 iErr		DC.B		'You entered an invalid value, it must be the letter',CR,LF
 		DC.B		'Y for yes or Q to quit program',CR,LF
 iErrL   DC.W    85
+conti		DC.B	CR,LF,'Would you like to continue disassembling?',CR,LF
+		DC.B	'Please enter letter Y for yes and Q for quit',CR,LF
+contiL		DC.W	91
+
 
 *****************************************
 * 	EA Variables and Strings        *
@@ -2134,6 +2146,7 @@ asc_wrd		DS.W	1		; This is the location where I'll be
 
 		
 		END		start
+
 
 
 
